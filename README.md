@@ -134,6 +134,10 @@ Everything else is closed by default:
   save is refused rather than overwriting their work.
 - Uploads are limited by extension and directory. On a host that executes files, also deny
   execution in the uploads directory (see `docs/other-hosts.md`), and test it.
+- The only outside hosts are `accounts.google.com` (the sign-in button),
+  `oauth2.googleapis.com` (checking the sign-in token) and, for the Worker, `api.github.com`
+  (reading files and committing saves; `GITHUB_API` overrides it). The PHP half writes to disk
+  and never calls GitHub. There is no telemetry.
 
 ## Working on Handpress
 
