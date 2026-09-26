@@ -163,8 +163,15 @@ about 250 lines. See `docs/other-hosts.md`.
 
 ## Status
 
-Early. It runs a real client site, and `npm test` covers sessions, the allowlist, the file
-checks and the keying script. The browser half has been tested by driving a real site end to
-end (edit, duplicate, upload, save, publish), but that test harness is not yet in this repo.
+Early, but not theoretical: it runs a real client site.
+
+- `npm test` — sessions, the allowlist, the file checks, the keying script.
+- `npm run test:browser` — drives the example in a real browser (edit, edit a shared block,
+  duplicate a card, edit the data file, save) against a stand-in GitHub, and checks what was
+  committed. It needs `playwright-core`, a local Chrome, and the two background processes
+  listed at the top of `test/browser.mjs`.
+
+Known gaps: no drafts or preview, one branch, and the editor assumes one person editing at a
+time (a second save is refused, not merged).
 
 MIT licensed.

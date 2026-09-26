@@ -99,7 +99,7 @@
       ]),
       h('span', { className: 'ed-group' }, [
         tool('Page', 'Page title, description and all images on this page', openPagePanel),
-        tool('Site data', 'Concerts, gallery, videos, links, lineage…', openDataPanel),
+        tool('Site data', 'Lists and settings the site renders from its data file', openDataPanel),
         tool('Help', 'How editing works', openHelp)
       ]),
       status,
@@ -219,7 +219,7 @@
       else a.replaceWith.apply(a, a.childNodes);
     } else {
       if (sel.isCollapsed) return alert('Select the words to turn into a link first.');
-      var u = prompt('Link address (e.g. https://…, contact.html, mailto:info@sarod.ca):', 'https://');
+      var u = prompt('Link address (e.g. https://…, /about, mailto:hello@example.com):', 'https://');
       if (!u || u === 'https://' || /^\s*javascript:/i.test(u)) return;
       document.execCommand('createLink', false, u.trim());
     }
@@ -436,7 +436,8 @@
   async function loadData(path) {
     if (data[path]) return data[path];
     var f = await api('file?path=' + encodeURIComponent(path));
-    var m = /^([\s\S]*?window\.SAROD_[A-Z]+ = )([\s\S]*);\s*$/.exec(f.content);
+    var m = /^([\s\S]*?window\.[A-Za-z_$][\w$]* = )([\s\S]*);\s*$/.exec(f.content);
+    if (!m) throw new Error(path + ' must look like:  window.NAME = { …JSON… };');
     var obj = JSON.parse(m[2]);
     return (data[path] = { obj: obj, sha: f.sha, prefix: m[1], dirty: false, open: new Set(), templates: templates(obj) });
   }
@@ -456,7 +457,8 @@
   function summary(v, i) {
     if (Array.isArray(v)) return v.filter(function (x) { return typeof x !== 'object'; }).join(' → ') || '#' + (i + 1);
     if (v && typeof v === 'object') {
-      var name = ['title', 'name', 'venue', 'raga', 'caption', 'city', 'id', 'key', 'src'].map(function (k) { return v[k]; }).filter(Boolean)[0];
+      var name = ['title', 'name', 'label', 'heading', 'caption', 'id'].map(function (k) { return v[k]; }).filter(Boolean)[0] ||
+        Object.keys(v).map(function (k) { return v[k]; }).filter(function (x) { return typeof x === 'string' && x.trim(); })[0];
       var when = v.date || v.year;
       return (when ? when + ' · ' : '') + (name || '#' + (i + 1));
     }
@@ -568,7 +570,7 @@
       Object.keys(data).forEach(function (p) {
         if (!data[p].dirty) return;
         files.push({ path: p, sha: data[p].sha, content: data[p].prefix + JSON.stringify(data[p].obj, null, 2) + ';\n' });
-        names.push(p === 'assets/js/config.js' ? 'site settings' : 'lineage data');
+        names.push(DATA_FILES[p] || p);
       });
       Object.keys(uploads).forEach(function (p) {
         // only images still used somewhere (a replaced-then-replaced-again picture is dropped)
@@ -594,7 +596,7 @@
     (function poll() {
       fetchServed(path).then(function (live) {
         if (live === expected) { changes = 0; return location.reload(); }
-        if (Date.now() - started > 4 * 60e3) refreshBar('Still publishing after 4 minutes. Check the deploy in Cloudflare (Workers → sarod-site → Deployments), then Reload.');
+        if (Date.now() - started > 4 * 60e3) refreshBar('Still publishing after 4 minutes. Check that your deploy succeeded, then Reload.');
         setTimeout(poll, 5000);
       }, function () { setTimeout(poll, 5000); });
     })();

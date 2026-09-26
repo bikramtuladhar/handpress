@@ -12,7 +12,8 @@
     "test": "node test.mjs",
     "keys": "node src/annotate.mjs \"example/site/*.html\" --global \"header, footer\"",
     "example": "node scripts/install.mjs example/site && wrangler dev --config example/wrangler.jsonc",
-    "install-assets": "node scripts/install.mjs"
+    "install-assets": "node scripts/install.mjs",
+    "test:browser": "node test/browser.mjs"
   },
   "devDependencies": {
     "parse5": "^8.0.0",
