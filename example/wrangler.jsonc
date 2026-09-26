@@ -1,0 +1,21 @@
+{
+  "name": "static-site-editor-example",
+  "main": "../src/worker.js",
+  "compatibility_date": "2026-09-01",
+  // The site itself. run_worker_first keeps /api/* with the Worker; everything else is a file.
+  "assets": { "directory": "./site", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "vars": {
+    "GITHUB_REPO": "you/your-site",
+    "GITHUB_BRANCH": "main",
+    "GOOGLE_CLIENT_ID": "",
+    // What the editor may touch. Anything not listed here cannot be read or written.
+    "EDITOR": {
+      "pages": ["index.html", "about.html"],
+      "dataFiles": { "data.js": "Opening times and markets" },
+      "globalBlocks": ["header", "footer"],
+      "uploadDir": "uploads",
+      "forceVisible": "[data-reveal]"
+    }
+  }
+  // Secrets (wrangler secret put …): GITHUB_TOKEN, SESSION_SECRET, ADMIN_EMAILS
+}

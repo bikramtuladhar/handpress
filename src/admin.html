@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Editor sign-in</title>
+  <style>
+    /* Deliberately plain: drop in your own stylesheet to make it look like the site. */
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px;
+           font: 16px/1.5 system-ui, sans-serif; background: #fafaf8; color: #1d1a16; }
+    .signin { max-width: 26rem; text-align: center; display: grid; gap: 20px; justify-items: center;
+              padding: 40px 32px; border: 1px solid rgba(0,0,0,.12); border-radius: 12px; background: #fff; }
+    .signin p { margin: 0; }
+    .signin h1 { font-size: 1.25rem; margin: 0; }
+    .muted { opacity: .7; }
+    #msg:empty { display: none; }
+  </style>
+</head>
+<body>
+  <main class="signin frame" style="padding: 40px 32px">
+    <p class="muted">Site editor</p>
+    <h1>Sign in to edit the site</h1>
+    <p class="muted">Use the Google account that has been given editing rights.</p>
+    <div id="gbtn"></div>
+    <p id="msg" role="status"></p>
+    <p><a href="/">Back to the site</a></p>
+  </main>
+  <script src="https://accounts.google.com/gsi/client" async onload="start()"></script>
+  <script>
+    var msg = document.getElementById('msg');
+    function say(t) { msg.textContent = t; }
+    async function start() {
+      var cfg = await fetch('/api/config').then(function (r) { return r.json(); });
+      if (!cfg.clientId) return say('Sign-in is not set up yet (GOOGLE_CLIENT_ID is empty).');
+      google.accounts.id.initialize({ client_id: cfg.clientId, callback: signIn });
+      google.accounts.id.renderButton(document.getElementById('gbtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
+    }
+    async function signIn(res) {
+      say('Checking…');
+      var r = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential: res.credential }) });
+      var data = await r.json().catch(function () { return {}; });
+      if (!r.ok) return say(data.error || 'Sign-in failed.');
+      say('Signed in as ' + data.email + '. Opening the site…');
+      var next = new URLSearchParams(location.search).get('next') || '/';
+      location.href = /^\/(?!\/)/.test(next) ? next : '/'; // same-site paths only
+    }
+  </script>
+</body>
+</html>
