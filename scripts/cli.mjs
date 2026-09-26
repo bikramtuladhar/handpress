@@ -30,7 +30,10 @@ if (command === 'install') {
   const gi = rest.indexOf('--global');
   const globals = gi < 0 ? [] : (rest[gi + 1] || '').split(',').map(s => s.trim()).filter(Boolean);
   const patterns = gi < 0 ? rest : rest.slice(0, gi);
-  const files = patterns.flatMap(a => (a.includes('*') ? fs.globSync(a) : [a]));
+  const files = patterns
+    .flatMap(a => (a.includes('*') ? fs.globSync(a) : [a]))
+    // The sign-in page is not content, and a glob usually sweeps it up.
+    .filter(f => path.basename(f) !== 'admin.html');
   if (!files.length) usage();
   for (const f of files) {
     const out = annotate(fs.readFileSync(f, 'utf8'), { globals });
