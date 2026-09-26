@@ -6,7 +6,7 @@ No CMS, no build step, no database. Every save is a git commit.
 [![test](https://github.com/bikramtuladhar/handpress/actions/workflows/test.yml/badge.svg)](https://github.com/bikramtuladhar/handpress/actions/workflows/test.yml)
 [![npm](https://img.shields.io/npm/v/handpress.svg)](https://www.npmjs.com/package/handpress)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![skills](https://skills.sh/b/bikramtuladhar/handpress)](https://skills.sh/bikramtuladhar/handpress)
+[![agent skill](https://img.shields.io/badge/agent%20skill-handpress-1f883d.svg)](https://www.skills.sh/bikramtuladhar/handpress)
 
 ### ➜ [Try the demo](https://handpress-demo.bikramtuladhar2011.workers.dev) — no sign-up; it's a real page and you really edit it
 
