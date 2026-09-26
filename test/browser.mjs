@@ -26,6 +26,36 @@ const saveLabel = () => page.locator('.ed-bar button', { hasText: /^Save/ }).tex
 await ready();
 console.log('editor booted from config; editable units:', await page.locator('[contenteditable]').count());
 
+// The guide opens by itself on the first visit to a page, with this site's tips (EDITOR_HOOKS.guide).
+assert.equal(await page.locator('.ed-drawer .ed-guide').first().locator('li').count(), 3, 'guide tips for index.html');
+await page.locator('.ed-drawer button', { hasText: 'Show me' }).last().click();
+assert.equal(await page.locator('.ed-flash').count(), 1, 'Show me highlights the part');
+await page.locator('.ed-drawer button', { hasText: 'Close' }).click();
+
+// A list drawn from data.js (EDITOR_HOOKS.dataRegions): handles on each entry, redrawn as it changes.
+const markets = () => page.locator('[data-markets] > li').count();
+assert.equal(await page.locator('[data-markets] .ed-ov-tools').count(), await markets(), 'a handle bar per market');
+await page.locator('.ed-ov-bar button', { hasText: '+ Add' }).click();
+await page.locator('.ed-drawer details[open] label:has-text("Day") input').last().fill('Wednesday');
+await page.waitForFunction(() => /Wednesday/.test(document.querySelector('[data-markets]').textContent));
+await page.locator('.ed-drawer button', { hasText: 'Close' }).click();
+await page.locator('[data-markets]').evaluate(el => el.scrollIntoView({ block: 'center' }));
+await page.locator('[data-markets] > li').first().locator('button[title="Remove"]').click();
+assert.equal(await markets(), 2, 'one removed');
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.equal(await markets(), 3, 'undo put the market back, and the new one is still there');
+console.log('data list handles, live redraw, undo ok');
+
+// Sections: <main> is a list, so a whole section can be copied.
+const sections = () => page.locator('main > section').count();
+const n0 = await sections();
+await page.locator('main > section').nth(1).hover({ position: { x: 3, y: 3 } });
+await page.locator('.ed-item button', { hasText: '+' }).first().click();
+await page.locator('dialog .ed-choice', { hasText: 'Copy of this' }).click();
+assert.equal(await sections(), n0 + 1, 'section copied');
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.equal(await sections(), n0, 'and undone');
+
 await page.locator('[data-e="t2"]').click();           // the h1
 await page.keyboard.press('Meta+a'); await page.keyboard.type('Bread, very slowly');
 await page.locator('[data-e="gt6"]').click();          // footer, shared across pages
@@ -52,6 +82,7 @@ await nav;
 console.log('saved and reloaded');
 
 const idx = fs.readFileSync(SITE + 'index.html', 'utf8');
+assert.match(fs.readFileSync(SITE + 'data.js', 'utf8'), /Wednesday/, 'new market saved');
 assert.match(idx, /Bread, very slowly/);
 assert.equal(idx.match(/class="card"/g).length, 3, 'card duplicated');
 assert.match(fs.readFileSync(SITE + 'about.html', 'utf8'), /est\. 2011/, 'footer written to the other page too');

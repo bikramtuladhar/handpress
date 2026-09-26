@@ -27,7 +27,8 @@
   var UPLOAD_DIR = 'uploads';
   var HOOKS = window.EDITOR_HOOKS || {};
   // Parts of pages your JS draws from a data file: [selector, data file, dotted path, label].
-  // While editing, a button above each opens that list in "Site data".
+  // While editing, each gets an edit button, and when it has one child element per list item,
+  // handles on every item (move, duplicate, edit, remove) and “+ Add”.
   var DATA_REGIONS = HOOKS.dataRegions || [];
   // "+ Add" → new blocks: [label, html]. {k} becomes a fresh key.
   var BLOCKS = HOOKS.blocks || [
@@ -38,6 +39,9 @@
   var FONTS = HOOKS.fonts || [['Default', ''], ['Serif', 'Georgia, serif'], ['Sans-serif', 'system-ui, sans-serif'],
     ['Monospace', 'ui-monospace, monospace']];
   var SIZES = [['Default', ''], ['Small', '0.85em'], ['Large', '1.25em'], ['Larger', '1.6em'], ['Huge', '2.2em']];
+  // The Guide, per page: { 'index.html': [[tip, selector for “Show me”], …] }. Opens by itself the first
+  // time each page is edited.
+  var GUIDE = HOOKS.guide || {};
   var PAGE = pageFile(location.pathname);
   var DRAFT_KEY = 'ed-draft', CLIP_KEY = 'ed-clip';
 
@@ -46,7 +50,8 @@
   var dirtyUnits = new Set();                 // text keys typed into since the last sync
   var data = {};                              // path → { obj, sha, prefix, open, templates }
   var editing = false, busy = false, syncTimer = 0;
-  var draft = readDraft();                    // { seq, pages: {page: [op]}, global: [op], data: {path: {obj, sha, prefix, n}}, redo: [op] }
+  var draft = readDraft();                    // { seq, pages: {page: [op]}, global: [op], data: {path: {obj, sha, prefix, n}},
+                                              //   redo: [{op, page} | {data…}], hist: [{file, seq, before, sha, prefix}] (data undo) }
 
   var $ = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
@@ -96,16 +101,39 @@
 
   /* ------------------------------------------------------------- drafts */
   function readDraft() {
-    try { var d = JSON.parse(localStorage.getItem(DRAFT_KEY)); if (d && d.pages) { d.redo = d.redo || []; return d; } } catch (e) { /* none or unreadable */ }
-    return { seq: 0, pages: {}, global: [], data: {}, redo: [] };
+    try { var d = JSON.parse(localStorage.getItem(DRAFT_KEY)); if (d && d.pages) { d.redo = d.redo || []; d.hist = d.hist || []; return d; } } catch (e) { /* none or unreadable */ }
+    return { seq: 0, pages: {}, global: [], data: {}, redo: [], hist: [] };
   }
   function writeDraft() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); }
     catch (e) { refreshBar('Too big to keep as a draft (large images?). Save soon, or it is lost on reload.'); }
   }
-  function upKey(path) { return 'ed-up:' + path; }
-  function upload(path) { try { return JSON.parse(localStorage.getItem(upKey(path))); } catch (e) { return null; } }
+  // New images wait for Save in IndexedDB (localStorage holds only ~5 MB): path → { path, type, b64 }.
+  var ups = {};
+  function idb(mode, fn) {
+    return new Promise(function (ok, no) {
+      var r = indexedDB.open('ed-uploads', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('u'); };
+      r.onerror = function () { no(r.error); };
+      r.onsuccess = function () {
+        var tx = r.result.transaction('u', mode), out = fn(tx.objectStore('u'));
+        tx.oncomplete = function () { r.result.close(); ok(out && out.result); };
+        tx.onerror = function () { no(tx.error); };
+      };
+    });
+  }
+  function loadUploads() {
+    return idb('readonly', function (st) { return st.getAll(); })
+      .then(function (all) { (all || []).forEach(function (u) { ups[u.path] = u; }); }, function () { /* no IndexedDB */ });
+  }
+  function upload(path) { return ups[path]; }
   function liveUrl(v) { var u = v && upload(v); return u ? 'data:' + u.type + ';base64,' + u.b64 : v; }
+  function fixUploads() {                             // pages drawn from data point at not-yet-uploaded files
+    $$('img[src^="' + UPLOAD_DIR + '/"], a[href^="' + UPLOAD_DIR + '/"], audio[src^="' + UPLOAD_DIR + '/"], source[src^="' + UPLOAD_DIR + '/"]').forEach(function (n) {
+      var a = n.tagName === 'A' ? 'href' : 'src', v = n.getAttribute(a);
+      if (upload(v)) n.setAttribute(a, liveUrl(v));
+    });
+  }
   function listFor(op) { return op.k && op.k.charAt(0) === 'g' ? draft.global : (draft.pages[PAGE] = draft.pages[PAGE] || []); }
   function isGlobal(op) { return listFor(op) === draft.global; }
   function opsFor(page) { return (draft.pages[page] || []).concat(draft.global).sort(function (a, b) { return a.seq - b.seq; }); }
@@ -209,6 +237,31 @@
         if (op.sel === 'title') { m.textContent = op.v; if (L) L.title = op.v; } else m.setAttribute('content', op.v);
         break;
       }
+      case 'yt':                                         // a YouTube player written into the page
+        [s, l].forEach(function (n) {
+          var f = n && videos(n)[op.i];
+          if (!f) return;
+          if (f.tagName === 'IFRAME') {
+            f.setAttribute('src', f.getAttribute('src').replace(/(\/embed\/)[\w-]{11}/, '$1' + op.vid));
+            if (op.title) f.setAttribute('title', op.title);
+            return;
+          }
+          f.setAttribute('data-yt-id', op.vid);
+          f.setAttribute('data-yt-title', op.title);
+          $$('img', f).forEach(function (im) { im.setAttribute('src', 'https://i.ytimg.com/vi/' + op.vid + '/hqdefault.jpg'); });
+        });
+        break;
+      case 'clip':                                       // a track's preview clip (null: no clip, button removed)
+        [s, l].forEach(function (n, live) {
+          var b = n && players(n)[op.i];
+          if (!b) return;
+          if (!op.path) return b.remove();
+          var t = b.tagName === 'AUDIO' && !b.hasAttribute('src') && $('source', b), v = live ? liveUrl(op.path) : op.path;
+          if (t) { t.setAttribute('src', v); t.removeAttribute('type'); }
+          else b.setAttribute(b.tagName === 'AUDIO' ? 'src' : 'data-audio', v);
+          if (live && b.load) b.load();
+        });
+        break;
       case 'select':
         [S, L].forEach(function (d) {
           var sel = d && d.getElementById(op.sel);
@@ -262,7 +315,7 @@
       h('span', { className: 'ed-group' }, [
         tool('Page', 'Page title, description and all images on this page', openPagePanel),
         tool('Site data', 'Lists and settings the site renders from its data file', openDataPanel),
-        tool('Help', 'How editing works', openHelp)
+        tool('Guide', 'What you can change on this page, and how', openGuide)
       ]),
       status,
       h('span', { className: 'ed-group ed-end' }, [
@@ -285,7 +338,7 @@
     else status.textContent = editing ? 'Click any text to edit it' : 'Preview: the site works as normal';
     saveBtn.disabled = busy || !n;
     saveBtn.textContent = n ? 'Save (' + n + ')' : 'Save';
-    undoBtn.disabled = busy || !opsFor(PAGE).length;
+    undoBtn.disabled = busy || !(opsFor(PAGE).length || draft.hist.length);
     redoBtn.disabled = busy || !draft.redo.length;
     editBtn.textContent = editing ? 'Preview' : 'Edit';
   }
@@ -301,6 +354,12 @@
     syncUnits();
     editing = on && !!src;
     document.documentElement.classList.toggle('ed-on', editing);
+    // Collapsed sections open while editing (their titles are editable text, so a click can't toggle them).
+    $$('details').forEach(function (d) {
+      if (d.closest('[data-ed-ui]')) return;
+      if (editing && !d.open) { d.open = true; d.edOpened = true; }
+      else if (!editing && d.edOpened) { d.open = false; d.edOpened = false; }
+    });
     $$('[data-e]').forEach(function (el) { prep(el, editing); });
     $$('.ed-region').forEach(function (n) { n.remove(); });
     if (editing) DATA_REGIONS.forEach(function (r) {
@@ -310,6 +369,9 @@
       });
     });
     if (!editing && itemBar) itemBar.hidden = true;
+    if (editing) decorate();
+    else if (Object.keys(data).length) Object.keys(data).forEach(function (p) { previewData(p, data[p].obj); });   // redraw without the handles
+    else decorate();
     refreshBar();
   }
   // Text blocks get their source HTML back (undoing whatever site.js did to them) and become editable.
@@ -377,6 +439,10 @@
     var img = e.target.closest('img[data-e]');
     var inUnit = e.target.closest('[contenteditable]');
     if (img && !inUnit) { e.preventDefault(); e.stopPropagation(); return openImage(img); }
+    var yt = e.target.closest('[data-yt-id]');
+    if (yt && !inRegion(yt)) { e.preventDefault(); e.stopPropagation(); return openVideo(yt); }
+    var clip = e.target.closest('[data-audio]');
+    if (clip && !inRegion(clip)) { e.preventDefault(); e.stopPropagation(); return openClip(clip); }
     if (inUnit || e.target.closest('a, [type=submit]')) { e.preventDefault(); e.stopPropagation(); }
   }
   // Drop-down lists (select boxes) open their options editor instead of the list.
@@ -516,6 +582,68 @@
     });
   }
 
+  /* -------------------------------------------------------------- videos */
+  // YouTube players: <iframe src=".../embed/ID"> or a click-to-load <div data-yt-id="ID">.
+  function videos(n) { return $$('[data-yt-id], iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]', n); }
+  function players(n) { return $$('[data-audio], audio', n); }
+  function inRegion(el) { return DATA_REGIONS.some(function (r) { return el.closest(r[0]); }); }
+  function youtubeId(v) {
+    var m = /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/.exec(v) || /^\s*([\w-]{11})\s*$/.exec(v);
+    return m && m[1];
+  }
+  function openVideo(f) {
+    var owner = f.closest('[data-e]');
+    if (!owner || !srcEl(keyOf(owner))) return alert('This video can’t be changed here.');
+    var i = videos(owner).indexOf(f);
+    videoDialog(f.getAttribute('data-yt-id'), f.getAttribute('data-yt-title'), function (vid, title) {
+      commit({ t: 'yt', id: 'yt:' + keyOf(owner) + ':' + i, k: keyOf(owner), i: i, vid: vid, title: title });
+    });
+  }
+
+  function videoDialog(id, title, done, remove) {
+    var url = h('input', { value: id ? 'https://www.youtube.com/watch?v=' + id : '', placeholder: 'https://www.youtube.com/watch?v=…' });
+    var name = h('input', { value: title || '' });
+    var d = modal('YouTube video', [
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'YouTube link' }), url,
+        h('small', { textContent: 'Paste the address from YouTube (Share → Copy link works too).' })]),
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'Title' }), name]),
+      remove && h('p', {}, [tool('Remove this video', 'Take it off the page', function () { d.close(); remove(); })])
+    ], function () {
+      var vid = youtubeId(url.value);
+      if (!vid) throw new Error('That doesn’t look like a YouTube link.');
+      return done(vid, name.value.trim());
+    });
+  }
+  /* --------------------------------------------------------- audio clips */
+  function openClip(b) {
+    var owner = b.closest('[data-e]');
+    if (!owner || !srcEl(keyOf(owner))) return alert('This clip can’t be changed here.');
+    var i = players(owner).indexOf(b), picked = null;
+    var now = b.tagName === 'AUDIO' ? (b.currentSrc || b.getAttribute('src')) : b.getAttribute('data-audio');
+    var player = h('audio', { controls: true, src: now || '', className: 'ed-audio' });
+    var file = h('input', { type: 'file', accept: 'audio/mpeg,audio/mp4,audio/x-m4a,audio/ogg,.mp3,.m4a,.ogg', on: { change: function () {
+      picked = this.files[0];
+      if (picked) player.src = URL.createObjectURL(picked);
+    } } });
+    var d = modal('Audio', [
+      player,
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'Replace with a new file (mp3, m4a or ogg)' }), file,
+        h('small', { textContent: 'Up to 10 MB. Short clips load quickest.' })]),
+      h('p', {}, [tool('Remove the audio', 'Take this player off the page', function () {
+        d.close();
+        commit({ t: 'clip', id: 'clip:' + keyOf(owner) + ':' + i, k: keyOf(owner), i: i, path: null });
+      })])
+    ], async function () {
+      if (!picked) return;
+      commit({ t: 'clip', id: 'clip:' + keyOf(owner) + ':' + i, k: keyOf(owner), i: i, path: await keepAudio(picked) });
+    });
+  }
+  async function keepAudio(file) {
+    if (file.size > 10e6) throw new Error('That file is over 10 MB. Trim it to a short clip first.');
+    var ext = (/\.(mp3|m4a|ogg)$/i.exec(file.name) || [, { 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg' }[file.type] || 'm4a'])[1].toLowerCase();
+    return keepUpload(UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.' + ext, file.type || 'audio/mpeg', file);
+  }
+
   /* -------------------------------------------------------- select boxes */
   function openSelect(id) {
     var s = src.getElementById(id);
@@ -569,7 +697,9 @@
     document.body.append(itemBar);
     document.addEventListener('pointerover', function (e) {
       if (!editing || e.target.closest('[data-ed-ui]')) return;
-      if (held && held.contains(e.target)) return;      // stay on the block picked with ⤴ or clicked into
+      // Stay on the block picked with ⤴ or clicked into while the pointer is on it or on what surrounds it
+      // (the menu moves when ⤴ is pressed, leaving the pointer over the enclosing section).
+      if (held && held.isConnected && (held.contains(e.target) || e.target.contains(held))) return;
       held = null;
       var it = e.target.closest('[data-e-list] > [data-e]') || e.target.closest('[data-e]');
       if (it && it !== current && srcEl(keyOf(it))) showItemBar(it);
@@ -580,8 +710,16 @@
     });
     addEventListener('scroll', function () { if (current && !itemBar.hidden) showItemBar(current); }, { passive: true });
   }
+  function rectOf(el) {                                // display:contents boxes have no rect of their own
+    var r = el.getBoundingClientRect();
+    if (r.width || !el.children.length) return r;
+    var rs = Array.prototype.map.call(el.children, function (c) { return c.getBoundingClientRect(); });
+    var top = Math.min.apply(null, rs.map(function (x) { return x.top; })), right = Math.max.apply(null, rs.map(function (x) { return x.right; }));
+    return { top: top, right: right, width: right - Math.min.apply(null, rs.map(function (x) { return x.left; })),
+      height: Math.max.apply(null, rs.map(function (x) { return x.bottom; })) - top };
+  }
   function showItemBar(it) {
-    var r = it.getBoundingClientRect();
+    var r = rectOf(it);
     if (!r.width || !r.height) return;
     current = it;
     var a = anchors(it)[0];
@@ -604,6 +742,16 @@
   function insertAfter(it, html) {
     syncUnits();
     var node = rekey(fragment(src, html), gOf(it));
+    var gone = [];                                      // a copy must not repeat ids (anchors, form labels)
+    [node].concat($$('[id]', node)).forEach(function (n) {
+      if (n.id && src.getElementById(n.id)) { gone.push(n.id); n.removeAttribute('id'); }
+    });
+    [node].concat($$('[aria-labelledby], [aria-describedby], label[for]', node)).forEach(function (n) {
+      ['aria-labelledby', 'aria-describedby', 'for'].forEach(function (a) {
+        var v = n.getAttribute(a);
+        if (v && v.split(/\s+/).some(function (id) { return gone.indexOf(id) >= 0; })) n.removeAttribute(a);
+      });
+    });
     commit({ t: 'after', k: keyOf(it), html: node.outerHTML });
     var live = liveEl(keyOf(node));
     if (live) { showItemBar(live); live.scrollIntoView({ block: 'nearest' }); }
@@ -661,19 +809,21 @@
       r.readAsDataURL(blob);
     });
   }
-  // Big photos are scaled to 2000px on the long side before upload; small ones go up as they are.
   function slug(name) {
-    return name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'image';
+    return name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'file';
   }
-  function keep(path, type, b64) {
-    try { localStorage.setItem(upKey(path), JSON.stringify({ type: type, b64: b64 })); }
-    catch (e) { throw new Error('This image is too big to hold until Save. Save your other edits first, then try a smaller image.'); }
+  async function keepUpload(path, type, blob) {
+    var rec = { path: path, type: type, b64: await fileToBase64(blob) };
+    ups[path] = rec;
+    await idb('readwrite', function (st) { st.put(rec, path); }).catch(function () {
+      refreshBar('This browser can’t keep new files until Save: save before leaving the page.');
+    });
+    return path;
   }
+  // Big photos are scaled to 2000px on the long side before upload; small ones go up as they are.
   async function prepareImage(file) {
     if (file.type === 'image/svg+xml') {            // vector: no bitmap to resize, keep the file as it is
-      var svgPath = UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.svg';
-      keep(svgPath, file.type, await fileToBase64(file));
-      return { path: svgPath, w: 0, h: 0 };
+      return { path: await keepUpload(UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.svg', file.type, file), w: 0, h: 0 };
     }
     var bmp = await createImageBitmap(file);
     var scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
@@ -687,8 +837,7 @@
       ext = type === 'image/webp' ? 'webp' : 'jpg';
       blob = await new Promise(function (ok) { c.toBlob(ok, type, 0.85); });
     }
-    var path = UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.' + ext;
-    keep(path, type, await fileToBase64(blob));
+    var path = await keepUpload(UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.' + ext, type, blob);
     return { path: path, w: w, h: hgt };
   }
   function openImage(img) {
@@ -744,21 +893,44 @@
     document.body.append(d);
     return d;
   }
-  function openHelp() {
-    modal('How editing works', [
-      h('ul', {}, [
+  function openGuide() {
+    var tips = GUIDE[PAGE] || [];
+    drawer('Guide · ' + PAGE.replace('.html', ''), [
+      h('h3', { textContent: 'On this page' }),
+      tips.length ? h('ul', { className: 'ed-guide' }, tips.map(function (t) {
+        var target = t[1] && $(t[1]);
+        return h('li', {}, [h('span', { textContent: t[0] }), target && tool('Show me', 'Scroll to it', function () { showMe(target); })]);
+      })) : h('p', { className: 'ed-note', textContent: 'Nothing special here: see below.' }),
+      h('h3', { textContent: 'Everywhere' }),
+      h('ul', { className: 'ed-guide' }, [
         'Click any text on the page and type. Shift+Enter makes a line break.',
         'Select words, then B / I / Link / Style in the bar. Style sets colour, size and font. Pasted text arrives plain.',
+        'Whole sections have a menu too (hover the space around the text): copy a section, move it, remove it, or paste it on another page.',
+        'YouTube videos have a “Change video” button: paste a new link. To add one, ⧉ duplicates the block around a video, then change its link.',
+        'Audio players have a “Change audio” button: upload, replace or remove the file.',
         'Hover a card, list entry or section for its menu; click into text for that block’s menu, and ⤴ for the block around it. + adds after it (a new paragraph, heading or button, a copy, or anything you copied or removed), ⧉ duplicates, Copy copies it to paste elsewhere (other pages too), ↑ ↓ move, 🔗 edits its link, ↗ follows the link, 🎨 styles it, ✕ removes it.',
         'Undo / Redo step back and forward through your unsaved edits. Removed something? Undo, or + → paste it back.',
         'Click a drop-down list (e.g. on Contact) to change its choices.',
         'Click a picture to replace it or change its description. “Page” lists every image, including ones you can’t click.',
         'The header, menu and footer are shared: editing them here changes every page.',
-        'Lists, dates and links that the site draws from a data file are edited under “Site data”. Buttons on the page take you straight there.',
+        'Lists the site draws from its data file are edited under “Site data”. Buttons on the page take you straight there, and their items have handles to move, edit or remove them.',
         'Edits are kept in this browser until you Save, even in Preview, on other pages, or after a reload. The counter shows how many are waiting. Save publishes all of them; every save is kept in the history.',
         'Use Preview to click around the site normally, then Edit to continue.'
-      ].map(function (t) { return h('li', { textContent: t }); }))
+      ].map(function (t) { return h('li', { textContent: t }); })),
+      h('p', { className: 'ed-note', textContent: 'This guide opens by itself the first time you edit each page. The Guide button brings it back.' })
     ]);
+  }
+  function showMe(el) {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.remove('ed-flash'); void el.offsetWidth; el.classList.add('ed-flash');
+    setTimeout(function () { el.classList.remove('ed-flash'); }, 2600);
+  }
+  function guideOnce() {
+    try {
+      if (localStorage.getItem('ed-guide:' + PAGE)) return;
+      localStorage.setItem('ed-guide:' + PAGE, '1');
+    } catch (e) { return; }
+    openGuide();
   }
 
   function openPagePanel() {
@@ -794,7 +966,7 @@
     if (!m) throw new Error(path + ' must look like:  window.NAME = { …JSON… };');
     var kept = draft.data[path];
     var obj = kept ? kept.obj : JSON.parse(m[2]);
-    return (data[path] = { obj: obj, sha: kept ? kept.sha : f.sha, prefix: m[1], open: new Set(), templates: templates(JSON.parse(m[2])) });
+    return (data[path] = { obj: obj, last: JSON.stringify(obj), sha: kept ? kept.sha : f.sha, prefix: m[1], open: new Set(), templates: templates(JSON.parse(m[2])) });
   }
   // First item of every array, blanked: the template for "Add" once a list has been emptied.
   function templates(obj, path, out) {
@@ -820,7 +992,7 @@
     return String(v === null ? '' : v) || '(empty)';
   }
 
-  // pathArg / focus: open this file with this dotted path (e.g. "concerts.upcoming") expanded.
+  // pathArg / focus: open this file with this dotted path (e.g. "markets" or "shop.items[2]") expanded.
   async function openDataPanel(pathArg, focus) {
     var pick = h('select', { className: 'ed-select' }, Object.keys(DATA_FILES).map(function (p) {
       return h('option', { value: p, textContent: DATA_FILES[p] });
@@ -832,7 +1004,7 @@
       try {
         var d = await loadData(pick.value);
         if (typeof focus === 'string') {
-          focus.split('.').reduce(function (acc, part) { var p = acc ? acc + '.' + part : part; d.open.add(p); return p; }, '');
+          for (var i = 1; i <= focus.length; i++) if (i === focus.length || /[.[]/.test(focus[i])) d.open.add(focus.slice(0, i)); // a, a.b, a.b[2]
           focus = null;
         }
         box.textContent = '';
@@ -847,15 +1019,26 @@
     show();
   }
 
+  var burst = {};
+  // typing: keystrokes in a row count as one edit (and one undo step); anything else is its own.
+  function markData(file, d, typing) {
+    var kept = draft.data[file] = draft.data[file] || { sha: d.sha, prefix: d.prefix, n: 0 };
+    kept.obj = d.obj;
+    if (!typing || !burst[file]) {
+      kept.n++;
+      draft.hist.push({ file: file, seq: ++draft.seq, before: d.last, sha: kept.sha, prefix: kept.prefix });
+      if (draft.hist.length > 40) draft.hist.shift();
+      draft.redo = [];
+    }
+    d.last = JSON.stringify(d.obj);
+    clearTimeout(burst[file]);
+    burst[file] = typing ? setTimeout(function () { burst[file] = 0; }, 1500) : 0;
+    writeDraft(); refreshBar();
+  }
   function render(box, d, file) {
-    var t = 0, pt = 0;
-    function changed() {
-      var kept = draft.data[file] = draft.data[file] || { sha: d.sha, prefix: d.prefix, n: 0 };
-      kept.obj = d.obj;
-      if (!t) kept.n++;                                 // a burst of typing counts as one edit
-      clearTimeout(t);
-      t = setTimeout(function () { t = 0; }, 1500);
-      writeDraft(); refreshBar();
+    var pt = 0;
+    function changed(typing) {
+      markData(file, d, typing);
       clearTimeout(pt);
       pt = setTimeout(function () { previewData(file, d.obj); }, 250);
     }
@@ -893,16 +1076,16 @@
       }
       var input;
       if (typeof v === 'boolean') {
-        input = h('input', { type: 'checkbox', checked: v, on: { change: function () { holder[key] = this.checked; changed(); } } });
+        input = h('input', { type: 'checkbox', checked: v, on: { change: function () { holder[key] = this.checked; changed(true); } } });
       } else if (typeof v === 'number') {
-        input = h('input', { type: 'number', step: 'any', value: v, on: { input: function () { holder[key] = this.value === '' ? null : Number(this.value); changed(); } } });
+        input = h('input', { type: 'number', step: 'any', value: v, on: { input: function () { holder[key] = this.value === '' ? null : Number(this.value); changed(true); } } });
       } else {
         var s = v == null ? '' : String(v);
         var date = key === 'date' || /^\d{4}-\d\d-\d\d$/.test(s);
         var attrs = { value: s, on: { input: function () {
           var t = this.value;
           holder[key] = v === null ? (t === '' ? null : /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : t) : t;
-          changed();
+          changed(true);
         } } };
         if (date) attrs.type = 'date'; else if (s.length > 60) attrs.rows = Math.min(8, Math.ceil(s.length / 55) + 1);
         input = h(!date && s.length > 60 ? 'textarea' : 'input', attrs);
@@ -915,7 +1098,81 @@
 
   // Show unsaved data on the page, if the site gives a way to redraw from it (see README).
   function previewData(path, obj) {
-    if (HOOKS.dataChanged) HOOKS.dataChanged(path, obj);
+    if (!HOOKS.dataChanged) return;
+    HOOKS.dataChanged(path, obj);
+    fixUploads();
+    decorate();
+  }
+
+  /* ---------------------------------------------------------- on-page handles */
+  // While editing: “Change video / audio” buttons on players, and handles on lists drawn from a data
+  // file (dataRegions). A region gets per-item handles when it has one child element per list item.
+  async function editData(file, fn, redraw) {
+    var d = await loadData(file);
+    fn(d.obj);
+    markData(file, d, redraw === false);
+    if (redraw !== false) previewData(file, d.obj);
+  }
+  function getPath(obj, path) {
+    return path.split('.').reduce(function (o, k) { return o == null ? o : o[k]; }, obj);
+  }
+  function nudge(list, i, dir) { var j = i + dir; if (j >= 0 && j < list.length) list.splice(j, 0, list.splice(i, 1)[0]); }
+  function ov(tag, attrs, kids) { attrs.className = 'ed-ov ' + (attrs.className || ''); attrs['data-ed-ui'] = ''; return h(tag, attrs, kids); }
+  var IMAGE_FIELDS = ['src', 'image', 'img', 'photo', 'picture'];
+
+  function decorate() {
+    $$('.ed-ov').forEach(function (n) { n.remove(); });
+    $$('.ed-ov-item').forEach(function (n) { n.classList.remove('ed-ov-item'); });
+    if (!editing) return;
+    videos(document.body).forEach(function (f) {
+      if (f.tagName === 'IFRAME' && !inRegion(f)) f.before(ov('p', { className: 'ed-ov-bar' }, [tool('▶ Change video', 'Paste a different YouTube link', function () { openVideo(f); })]));
+    });
+    $$('audio').forEach(function (a) {
+      if (!inRegion(a)) a.before(ov('p', { className: 'ed-ov-bar' }, [tool('♪ Change audio', 'Upload, replace or remove this audio', function () { openClip(a); })]));
+    });
+    DATA_REGIONS.forEach(function (r) {
+      loadData(r[1]).then(function (d) { if (editing) $$(r[0]).forEach(function (el) { regionHandles(el, r, d); }); }, function () {});
+    });
+  }
+  function regionHandles(el, r, d) {
+    var file = r[1], path = r[2], list = getPath(d.obj, path);
+    if (!Array.isArray(list)) return;
+    var items = Array.prototype.filter.call(el.children, function (c) { return !c.hasAttribute('data-ed-ui'); });
+    var tpl = d.templates[path.replace(/\[\d+\]/g, '[]')] || {};
+    var field = tpl && typeof tpl === 'object' ? IMAGE_FIELDS.filter(function (k) { return k in tpl; })[0] : null;
+    var bar = [tool('+ Add', 'Add a new entry at the end', function () {
+      editData(file, function (o) { var l = getPath(o, path); l.push(JSON.parse(JSON.stringify(l.length ? blank(l[l.length - 1]) : tpl))); })
+        .then(function () { openDataPanel(file, path + '[' + (getPath(d.obj, path).length - 1) + ']'); });
+    })];
+    if (field) {
+      var pick = h('input', { type: 'file', multiple: true, accept: 'image/jpeg,image/png,image/webp,image/gif,image/svg+xml', hidden: true, on: { change: async function () {
+        var files = Array.prototype.slice.call(this.files), added = [];
+        try {
+          for (var i = 0; i < files.length; i++) {
+            refreshBar('Preparing image ' + (i + 1) + ' of ' + files.length + '…');
+            var up = await prepareImage(files[i]), item = JSON.parse(JSON.stringify(tpl));
+            item[field] = up.path;
+            if ('w' in item && up.w) { item.w = up.w; item.h = up.h; }
+            added.push(item);
+          }
+        } catch (e) { alert(e.message); }
+        if (added.length) await editData(file, function (o) { Array.prototype.push.apply(getPath(o, path), added); });
+        refreshBar(added.length ? 'Added ' + added.length + ' at the end. Use ✎ on each to fill in the rest.' : null);
+      } } });
+      bar.push(tool('+ Add images', 'Upload one or more images, each becomes a new entry', function () { pick.click(); }), pick);
+    }
+    el.before(ov('p', { className: 'ed-ov-bar' }, bar));
+    if (items.length !== list.length) return;          // can't tell which element is which entry
+    items.forEach(function (it, i) {
+      it.classList.add('ed-ov-item');
+      it.append(ov('span', { className: 'ed-ov-tools' }, [
+        tool('↑', 'Move earlier', function () { editData(file, function (o) { nudge(getPath(o, path), i, -1); }); }),
+        tool('↓', 'Move later', function () { editData(file, function (o) { nudge(getPath(o, path), i, 1); }); }),
+        tool('⧉', 'Duplicate', function () { editData(file, function (o) { var l = getPath(o, path); l.splice(i + 1, 0, JSON.parse(JSON.stringify(l[i]))); }); }),
+        tool('✎', 'Edit this entry', function () { openDataPanel(file, path + '[' + i + ']'); }),
+        tool('✕', 'Remove', function () { if (confirm('Remove this entry?')) editData(file, function (o) { getPath(o, path).splice(i, 1); }); })
+      ]));
+    });
   }
 
   /* ---------------------------------------------------------------- save */
@@ -954,9 +1211,8 @@
         names.push(DATA_FILES[p] || p);
       });
       var html = files.map(function (f) { return f.content; }).join('\n');
-      Object.keys(localStorage).filter(function (k) { return k.indexOf('ed-up:') === 0; }).forEach(function (k) {
-        var p = k.slice(6), u = upload(p);
-        if (u && html.indexOf(p) >= 0) files.push({ path: p, base64: u.b64 });  // only images still used somewhere
+      Object.keys(ups).forEach(function (p) {
+        if (html.indexOf(p) >= 0) files.push({ path: p, base64: ups[p].b64 });  // only images still used somewhere
       });
       if (!files.length) { clearDraft(); busy = false; return refreshBar(); }
       await api('save', { files: files, message: 'Edit ' + names.join(', ') });
@@ -970,10 +1226,12 @@
     }
   }
   function clearDraft() {
-    draft = { seq: 0, pages: {}, global: [], data: {}, redo: [] };
+    draft = { seq: 0, pages: {}, global: [], data: {}, redo: [], hist: [] };
+    ups = {};
+    idb('readwrite', function (st) { st.clear(); }).catch(function () {});
     try {
       localStorage.removeItem(DRAFT_KEY);
-      Object.keys(localStorage).forEach(function (k) { if (k.indexOf('ed-up:') === 0) localStorage.removeItem(k); });
+      Object.keys(localStorage).forEach(function (k) { if (k.indexOf('ed-up:') === 0) localStorage.removeItem(k); }); // older drafts
     } catch (e) { /* storage off */ }
   }
 
@@ -985,7 +1243,7 @@
     (function poll() {
       fetchServed(path).then(function (live) {
         if (live === expected) return location.reload();
-        if (Date.now() - started > 4 * 60e3) status.textContent = 'Still publishing after 4 minutes. Check the deploy, then Reload.';
+        if (Date.now() - started > 4 * 60e3) status.textContent = 'Still publishing after 4 minutes. Check that your deploy succeeded, then Reload.';
         setTimeout(poll, 5000);
       }, function () { setTimeout(poll, 5000); });
     })();
@@ -993,7 +1251,16 @@
 
   function undo() {
     syncUnits();
-    var all = opsFor(PAGE), last = all[all.length - 1];
+    var all = opsFor(PAGE), last = all[all.length - 1], h = draft.hist[draft.hist.length - 1];
+    if (h && (!last || h.seq > last.seq)) {             // the latest edit was to Site data: put the file back
+      draft.hist.pop();
+      var kept = draft.data[h.file];
+      draft.redo.push({ data: h, after: JSON.stringify(kept.obj) });
+      kept.obj = JSON.parse(h.before);
+      if (!--kept.n) delete draft.data[h.file];
+      writeDraft();
+      return location.reload();
+    }
     if (!last) return;
     var list = listFor(last);
     list.splice(list.indexOf(last), 1);
@@ -1005,6 +1272,15 @@
     syncUnits();
     var r = draft.redo.pop();
     if (!r) return;
+    if (r.data) {
+      var k = draft.data[r.data.file] = draft.data[r.data.file] || { sha: r.data.sha, prefix: r.data.prefix, n: 0 };
+      k.obj = JSON.parse(r.after);
+      k.n++;
+      r.data.seq = ++draft.seq;
+      draft.hist.push(r.data);
+      writeDraft();
+      return location.reload();
+    }
     r.op.seq = ++draft.seq;
     (isGlobal(r.op) ? draft.global : (draft.pages[r.page] = draft.pages[r.page] || [])).push(r.op);
     writeDraft();
@@ -1064,6 +1340,7 @@
     }
     var live = await fetchServed(PAGE);
     if (live !== f.content) return waitForPublish(PAGE, f.content, 'A newer version of this page is still publishing. It will refresh by itself when live.');
+    await loadUploads();
     src = parseHtml(f.content);
     srcSha = f.sha;
     noteKeys(src.body);
@@ -1075,6 +1352,7 @@
     }
     Object.keys(draft.data).forEach(function (p) { previewData(p, draft.data[p].obj); });
     setEditing(true);
+    guideOnce();
   }
 
   /* -------------------------------------------------------------- styles */
@@ -1095,8 +1373,20 @@
     '.ed-on [contenteditable]:empty::before{content:"(empty)";opacity:.5}',
     '.ed-on img[data-e]{cursor:pointer}.ed-on img[data-e]:hover{outline:3px solid var(--ed-gold);outline-offset:-3px}',
     '.ed-on select[id]{cursor:pointer;outline:1px dashed rgba(201,138,46,.8)}',
-    '.ed-on .ed-current{box-shadow:0 0 0 2px rgba(201,138,46,.5)}',
+    '.ed-on .ed-current,.ed-on .ed-current[style*=contents]>*,.ed-on .dl-grid>.ed-current>*{box-shadow:0 0 0 2px rgba(201,138,46,.5)}',
     '.ed-region{display:block;margin:8px 0;position:relative;z-index:5}',
+    '.ed-ov-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;font:13px/1.4 system-ui,sans-serif;color:var(--ed-ink)}',
+    '.ed-ov-bar .ed-btn,.ed-ov-tools .ed-btn,.ed-ov-row .ed-btn{color:#f4ead6;background:var(--ed-ink);border-color:var(--ed-ink)}',
+    '.ed-ov-bar span{background:#fff4d6;padding:4px 8px;border-radius:6px}',
+    '.ed-on .ed-ov-item{position:relative}',
+    '.ed-ov-tools{position:absolute;top:6px;right:6px;display:flex;gap:2px;z-index:6;opacity:.85}.ed-ov-tools:hover{opacity:1}', // no hover on touch screens
+    '.ed-ov-tools .ed-btn,.ed-ov-row .ed-btn{padding:2px 7px}',
+    '.ed-ov-row{white-space:nowrap}',
+    '.ed-audio{display:block;width:100%;margin:0 0 12px}',
+    '.ed-guide{padding-left:18px;margin:0 0 8px}.ed-guide li{margin:0 0 10px}.ed-guide li .ed-btn{margin-left:6px;padding:2px 8px;font-size:12px}',
+    '@keyframes ed-flash{0%,100%{box-shadow:0 0 0 0 rgba(201,138,46,0)}20%,60%{box-shadow:0 0 0 6px rgba(201,138,46,.9)}}',
+    '.ed-flash{animation:ed-flash 1.3s ease-in-out 2;border-radius:6px}',
+    '.ed-on [data-audio],.ed-on [data-yt-id]{outline:2px dashed rgba(201,138,46,.8);outline-offset:2px;cursor:pointer}',
     '.ed-item{position:absolute;z-index:2147483001;display:flex;flex-wrap:wrap;gap:2px;padding:3px;border-radius:8px;background:var(--ed-ink);box-shadow:0 2px 10px rgba(0,0,0,.3);font:13px system-ui,sans-serif;color:#f4ead6;max-width:calc(100vw - 8px)}',
     '.ed-item .ed-btn{padding:3px 8px}',
     '.ed-modal{border:0;border-radius:12px;padding:20px;width:min(560px,calc(100vw - 32px));background:var(--ed-paper);color:var(--ed-ink);font:15px/1.45 system-ui,sans-serif}',

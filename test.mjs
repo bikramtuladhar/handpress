@@ -30,6 +30,7 @@ for (const p of ['secrets.js', '../index.html', 'worker.js', 'nested/index.html'
 }
 assert.ok(isUpload('uploads/photo-ab12.jpg', cfg));
 assert.ok(!isUpload('uploads/shell.php', cfg) && !isUpload('uploads/../x.jpg', cfg));
+assert.ok(isUpload('uploads/clip-ab12.mp3', cfg) && !isUpload('uploads/clip.mp3.php', cfg));
 
 // file checks
 assert.equal(checkFile({ path: 'index.html', content: '<!doctype html><html></html>' }, cfg), '');

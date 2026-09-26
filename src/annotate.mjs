@@ -66,8 +66,9 @@ export function annotate(html, { globals = [] } = {}) {
     if (globals.some(sel => matches(el, sel))) g = 'g';
     if (el.tagName === 'img') return key(el, 'm', g);
     if (el !== body && isUnit(el)) return key(el, 't', g);
-    const ch = kids(el);
-    const list = LISTABLE.has(el.tagName) && ch.length >= 2 &&
+    const ch = kids(el).filter(k => !SKIP.has(k.tagName));
+    // <main>: its sections can be added, copied, moved and removed like any other list.
+    const list = (el.tagName === 'main' && ch.length > 0) || LISTABLE.has(el.tagName) && ch.length >= 2 &&
       ch.every(k => k.tagName === ch[0].tagName && !SKIP.has(k.tagName) &&
         (!WRAPPER.has(k.tagName) || firstClass(k) === firstClass(ch[0]))); // layout wrappers must also share a class
     ch.forEach(k => walk(k, g));

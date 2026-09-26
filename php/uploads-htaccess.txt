@@ -7,6 +7,6 @@
 RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .cgi .pl .py
 RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .cgi .pl .py
 
-<FilesMatch "^(?!.*\.(?i:jpe?g|png|webp|gif|svg)$).*$">
+<FilesMatch "^(?!.*\.(?i:jpe?g|png|webp|gif|svg|mp3|m4a|ogg)$).*$">
   Require all denied
 </FilesMatch>

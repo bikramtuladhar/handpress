@@ -251,8 +251,10 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
     sourceEl.setAttribute('data-count-to', parseInt(sourceEl.textContent, 10));
   },
 
-  // Parts of the page your script draws from a data file. While editing, a button above
-  // each one opens that list in "Site data": [selector, data file, dotted path, label].
+  // Parts of the page your script draws from a data file: [selector, data file, dotted path, label].
+  // While editing, each gets "+ Add" (and "+ Add images" when entries have an image field such as
+  // src), a button that opens the list in "Site data" and, when the element has one child per entry,
+  // handles on each entry: move, duplicate, edit, remove. Pair it with dataChanged.
   dataRegions: [['[data-markets]', 'data.js', 'markets', 'Markets']],
 
   // What "+ → New" offers, as [label, html]. {k} becomes a fresh key. Use your own classes.
@@ -266,8 +268,19 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
   },
 
   // Fonts offered by Style: [label, CSS font-family]. '' means "the page's own".
-  fonts: [['Default', ''], ['Headings', 'var(--font-display)']]
+  fonts: [['Default', ''], ['Headings', 'var(--font-display)']],
+
+  // The Guide: tips for each page, [text, selector for its "Show me" button]. It opens by itself
+  // the first time each page is edited; the Guide button brings it back.
+  guide: {
+    'index.html': [['Markets come from data.js: "+ Add", or the handles on each one.', '[data-markets]']]
+  }
 };</code></pre>
+    <p>Without any hooks the editor already handles YouTube embeds
+      (<code>&lt;iframe src="…/embed/ID"&gt;</code> or a click-to-load <code>&lt;div data-yt-id="ID"&gt;</code>)
+      and audio (<code>&lt;audio&gt;</code>, or a play button with <code>data-audio="file.mp3"</code>):
+      each gets a way to paste a new link or upload a new file. Audio uploads (mp3, m4a, ogg) go to
+      <code>uploadDir</code> with the images.</p>
     <div class="note">
       <p><strong>Text reverts after saving?</strong> Your script rewrites that element. Use <code>beforeEdit</code>.</p>
       <p><strong>Elements invisible while editing?</strong> A reveal-on-scroll animation. Set <code>forceVisible</code>.</p>

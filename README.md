@@ -41,13 +41,15 @@ Handpress keeps the HTML as the source of truth and teaches the browser to edit 
 | | |
 |---|---|
 | **Text** | Click and type. Bold, italic, links (address, text, new tab). Colour, size and font for selected words or a whole block. Pasted text arrives plain. |
-| **Blocks** | Hover any repeating thing — cards, list items, sections, buttons — to duplicate, move, delete, style, edit or follow its link. **+** adds after it: a new paragraph, heading or button, or anything copied or removed, from any page. |
+| **Blocks** | Hover any repeating thing — cards, list items, whole sections, buttons — to duplicate, move, delete, style, edit or follow its link. **+** adds after it: a new paragraph, heading or button, or anything copied or removed, from any page. |
 | **Drafts** | Unsaved edits are kept in the browser through Preview, page changes and reloads, with a counter. Undo / Redo. One Save commits every edited page. |
 | **Drop-downs** | Click a `<select>` to edit its options (label and value). |
 | **Images** | Click to replace (resized in the browser first) and edit the alt text. |
+| **Video and audio** | YouTube embeds take a new link; audio players take a new file (mp3, m4a, ogg). |
 | **Shared blocks** | Edit the header or footer once; it is written to every page. |
 | **Page settings** | Title, meta description, and the text shown when the page is shared. |
-| **Site data** | A form over your JSON data file, for lists the site renders from data. |
+| **Site data** | A form over your JSON data file, for lists the site renders from data. Lists on the page get handles too (move, duplicate, edit, remove, add, add images), and redraw as they change. |
+| **Guide** | Tips for each page, with a *Show me* button; opens by itself the first time a page is edited. |
 
 ![Duplicating and reordering list items](docs/images/lists.png)
 ![The site data panel](docs/images/site-data.png)

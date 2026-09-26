@@ -42,7 +42,7 @@ export const isPage = (p, cfg) => site(cfg).pages.includes(p);
 export const isData = (p, cfg) => Object.keys(site(cfg).dataFiles).includes(p);
 export const isEditable = (p, cfg) => isPage(p, cfg) || isData(p, cfg);
 export const isUpload = (p, cfg) =>
-  new RegExp(`^${site(cfg).uploadDir}/[a-z0-9-]+\\.(jpe?g|png|webp|gif|svg)$`).test(p) && !p.includes('..');
+  new RegExp(`^${site(cfg).uploadDir}/[a-z0-9-]+\\.(jpe?g|png|webp|gif|svg|mp3|m4a|ogg)$`).test(p) && !p.includes('..');
 
 /** Returns an error message, or '' when the file is acceptable to commit. */
 export function checkFile(f, cfg) {

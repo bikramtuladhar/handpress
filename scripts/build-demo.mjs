@@ -31,9 +31,6 @@ fs.copyFileSync(path.join(root, 'src', 'editor.js'), path.join(to, 'editor.js'))
 // after it has put the visitor's saved version back on screen.
 let site = fs.readFileSync(path.join(from, 'site.js'), 'utf8');
 site = site.replace(/\n\s*\/\/ The editor is loaded only[\s\S]*?\n  }\n/, '\n');
-site = site.replace('(function () {', '(function () {\n  window.renderSite = render;');
-site = site.replace('  var d = window.BAKERY', '  function render() {\n  var d = window.BAKERY');
-site = site.replace('})();', '  }\n  render();\n})();');
 fs.writeFileSync(path.join(to, 'site.js'), site);
 
 for (const f of ['index.html', 'about.html']) {

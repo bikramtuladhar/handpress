@@ -27,7 +27,7 @@ function is_data(string $p, array $cfg): bool { return array_key_exists($p, $cfg
 function is_editable(string $p, array $cfg): bool { return is_page($p, $cfg) || is_data($p, $cfg); }
 function is_upload(string $p, array $cfg): bool {
     $dir = preg_quote(trim($cfg['upload_dir'], '/'), '~');
-    return !str_contains($p, '..') && (bool) preg_match("~^$dir/[a-z0-9-]+\.(jpe?g|png|webp|gif|svg)$~", $p);
+    return !str_contains($p, '..') && (bool) preg_match("~^$dir/[a-z0-9-]+\.(jpe?g|png|webp|gif|svg|mp3|m4a|ogg)$~", $p);
 }
 
 function send($data, int $status = 200): never {
