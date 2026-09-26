@@ -259,6 +259,12 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
   blocks: [['Paragraph', '&lt;p data-e="{k}"&gt;New paragraph&lt;/p&gt;'],
            ['Button', '&lt;a class="btn" href="#" data-e="{k}"&gt;New button&lt;/a&gt;']],
 
+  // Called with unsaved data-file contents as they are edited (and on load, while a draft
+  // exists), so your script can redraw from them before Save.
+  dataChanged(path, obj) {
+    if (path === 'data.js') { window.BAKERY = obj; renderMarkets(); }
+  },
+
   // Fonts offered by Style: [label, CSS font-family]. '' means "the page's own".
   fonts: [['Default', ''], ['Headings', 'var(--font-display)']]
 };</code></pre>

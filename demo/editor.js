@@ -826,7 +826,7 @@
       return h('option', { value: p, textContent: DATA_FILES[p] });
     }));
     var box = h('div', { className: 'ed-data' });
-    drawer('Site data', [pick, h('p', { className: 'ed-note', textContent: 'Changes here show on the site after Save (the page reloads once published). “+ Add” at the end of a list adds an entry.' }), box]);
+    drawer('Site data', [pick, h('p', { className: 'ed-note', textContent: 'Changes go public when you Save. “+ Add” at the end of a list adds an entry.' }), box]);
     async function show() {
       box.textContent = 'Loading…';
       try {
@@ -848,7 +848,7 @@
   }
 
   function render(box, d, file) {
-    var t = 0;
+    var t = 0, pt = 0;
     function changed() {
       var kept = draft.data[file] = draft.data[file] || { sha: d.sha, prefix: d.prefix, n: 0 };
       kept.obj = d.obj;
@@ -856,6 +856,8 @@
       clearTimeout(t);
       t = setTimeout(function () { t = 0; }, 1500);
       writeDraft(); refreshBar();
+      clearTimeout(pt);
+      pt = setTimeout(function () { previewData(file, d.obj); }, 250);
     }
     function rerender() { var y = box.parentElement.scrollTop; box.textContent = ''; render(box, d, file); box.parentElement.scrollTop = y; }
     function node(parent, holder, key, label, path) {
@@ -909,6 +911,11 @@
       parent.append(h('label', { className: 'ed-field' + (typeof v === 'boolean' ? ' ed-field--check' : '') }, [h('span', { textContent: label }), input]));
     }
     Object.keys(d.obj).forEach(function (k) { node(box, d.obj, k, humanize(k), k); });
+  }
+
+  // Show unsaved data on the page, if the site gives a way to redraw from it (see README).
+  function previewData(path, obj) {
+    if (HOOKS.dataChanged) HOOKS.dataChanged(path, obj);
   }
 
   /* ---------------------------------------------------------------- save */
@@ -1066,6 +1073,7 @@
       writeDraft();
       alert(lost.length + ' unsaved edit(s) no longer match this page (it was changed elsewhere) and were dropped.');
     }
+    Object.keys(draft.data).forEach(function (p) { previewData(p, draft.data[p].obj); });
     setEditing(true);
   }
 
