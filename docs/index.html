@@ -246,9 +246,21 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
   },
 
   // When edited text is copied back to the source, for attributes that must follow it.
+  // liveEl is null when a page is rebuilt at save time, so change sourceEl only.
   syncUnit(sourceEl, liveEl) {
     sourceEl.setAttribute('data-count-to', parseInt(sourceEl.textContent, 10));
-  }
+  },
+
+  // Parts of the page your script draws from a data file. While editing, a button above
+  // each one opens that list in "Site data": [selector, data file, dotted path, label].
+  dataRegions: [['[data-markets]', 'data.js', 'markets', 'Markets']],
+
+  // What "+ → New" offers, as [label, html]. {k} becomes a fresh key. Use your own classes.
+  blocks: [['Paragraph', '&lt;p data-e="{k}"&gt;New paragraph&lt;/p&gt;'],
+           ['Button', '&lt;a class="btn" href="#" data-e="{k}"&gt;New button&lt;/a&gt;']],
+
+  // Fonts offered by Style: [label, CSS font-family]. '' means "the page's own".
+  fonts: [['Default', ''], ['Headings', 'var(--font-display)']]
 };</code></pre>
     <div class="note">
       <p><strong>Text reverts after saving?</strong> Your script rewrites that element. Use <code>beforeEdit</code>.</p>

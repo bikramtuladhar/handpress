@@ -40,8 +40,10 @@ Handpress keeps the HTML as the source of truth and teaches the browser to edit 
 
 | | |
 |---|---|
-| **Text** | Click and type. Bold, italic, links. Pasted text arrives plain. |
-| **Lists** | Hover any repeating thing — cards, list items, paragraphs, buttons — to duplicate, move or delete it. |
+| **Text** | Click and type. Bold, italic, links (address, text, new tab). Colour, size and font for selected words or a whole block. Pasted text arrives plain. |
+| **Blocks** | Hover any repeating thing — cards, list items, sections, buttons — to duplicate, move, delete, style, edit or follow its link. **+** adds after it: a new paragraph, heading or button, or anything copied or removed, from any page. |
+| **Drafts** | Unsaved edits are kept in the browser through Preview, page changes and reloads, with a counter. Undo / Redo. One Save commits every edited page. |
+| **Drop-downs** | Click a `<select>` to edit its options (label and value). |
 | **Images** | Click to replace (resized in the browser first) and edit the alt text. |
 | **Shared blocks** | Edit the header or footer once; it is written to every page. |
 | **Page settings** | Title, meta description, and the text shown when the page is shared. |
@@ -170,7 +172,7 @@ yourself — it is a plain Markdown file with front matter.
 
 Early, but not theoretical: it runs a real client site, edited by its owner.
 
-Deliberately missing: drafts and preview (the git history is the undo), approval workflow,
+Deliberately missing: server-side drafts (unsaved edits live in one browser), approval workflow,
 multiple simultaneous editors (a second concurrent save is refused, not merged), and any
 notion of content types. If you need those, use a CMS.
 

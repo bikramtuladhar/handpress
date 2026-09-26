@@ -1,6 +1,7 @@
 /**
  * Drives the example site in a real browser: edit text, edit a shared block, duplicate a
- * list item, edit the data file, save, and check what was committed.
+ * list item, undo / redo, reload (the draft survives), edit the data file, save, and check
+ * what was committed.
  *
  *   npm i -D playwright-core          (and a local Chrome)
  *   SITE_ROOT=$PWD/example/site node test/mock-github.mjs &
@@ -20,7 +21,9 @@ const page = await ctx.newPage();
 const errors = []; page.on('pageerror', e => errors.push(e.message));
 page.on('dialog', d => d.accept());
 await page.goto(B + '/');
-await page.waitForFunction(() => document.querySelector('.ed-status')?.textContent === 'Click any text to edit it', null, { timeout: 20000 });
+const ready = () => page.waitForFunction(() => /Click any text|unsaved edit/.test(document.querySelector('.ed-status')?.textContent || ''), null, { timeout: 20000 });
+const saveLabel = () => page.locator('.ed-bar button', { hasText: /^Save/ }).textContent();
+await ready();
 console.log('editor booted from config; editable units:', await page.locator('[contenteditable]').count());
 
 await page.locator('[data-e="t2"]').click();           // the h1
@@ -28,14 +31,23 @@ await page.keyboard.press('Meta+a'); await page.keyboard.type('Bread, very slowl
 await page.locator('[data-e="gt6"]').click();          // footer, shared across pages
 await page.keyboard.press('End'); await page.keyboard.type(' · est. 2011');
 await page.locator('[data-e="i12"]').hover();          // duplicate a product card
-await page.locator('.ed-item button[title="Duplicate this item"]').click();
+await page.locator('.ed-item button[title="Duplicate this"]').click();
+await page.locator('[data-e="i12"]').hover();          // remove the original card, then Undo, then Redo
+await page.locator('.ed-item button[title^="Remove"]').click();
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.equal(await page.locator('[data-e="i12"]').count(), 1, 'undo brought the card back');
+await page.getByRole('button', { name: 'Redo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.equal(await page.locator('[data-e="i12"]').count(), 0, 'redo removed it again');
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.match(await page.locator('[data-e="t2"]').textContent(), /Bread, very slowly/, 'draft survived the reloads');
+console.log('undo / redo / reload ok:', await saveLabel());
 await page.getByRole('button', { name: 'Site data' }).click();
 await page.locator('.ed-drawer summary', { hasText: /^Markets/ }).click();
 await page.locator('.ed-drawer summary', { hasText: 'Saturday' }).click();
 await page.locator('.ed-drawer label:has-text("Hours") input').first().fill('7am – 2pm');
 
 const nav = page.waitForEvent('load', { timeout: 60000 });
-await page.getByRole('button', { name: 'Save' }).click();
+await page.locator('.ed-bar button', { hasText: /^Save/ }).click();
 await nav;
 console.log('saved and reloaded');
 
