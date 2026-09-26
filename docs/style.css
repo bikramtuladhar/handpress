@@ -1,0 +1,173 @@
+/* Handpress documentation. Hand-written, like the sites it is for. */
+
+:root {
+  --paper: #edefe9;
+  --paper-raised: #f7f8f4;
+  --ink: #16181d;
+  --ink-soft: #565b64;
+  --press: #1b34b8;           /* reflex blue, the ink a small press actually keeps on the shelf */
+  --rule: rgba(22, 24, 29, .14);
+  --impression: rgba(22, 24, 29, .10);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --measure: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a;
+    --paper-raised: #1b1e23;
+    --ink: #e7e9e3;
+    --ink-soft: #a0a6b0;
+    --press: #97a6ff;
+    --rule: rgba(231, 233, 227, .18);
+    --impression: rgba(0, 0, 0, .45);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 17px/1.65 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-variation-settings: "SOFT" 20, "WONK" 1;
+  line-height: 1.1;
+  letter-spacing: -.01em;
+}
+
+h1 { font-size: clamp(2.6rem, 6vw, 4.1rem); margin: 0 0 .3em; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); margin: 2.6em 0 .6em; }
+h3 { font-size: 1.15rem; margin: 2em 0 .4em; font-variation-settings: "SOFT" 0, "WONK" 0; }
+
+p, li { max-width: var(--measure); }
+a { color: var(--press); text-underline-offset: .18em; }
+a:focus-visible, button:focus-visible, [contenteditable]:focus-visible {
+  outline: 2px solid var(--press); outline-offset: 3px;
+}
+
+code {
+  font: 87.5%/1.5 var(--mono);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: .08em .35em;
+}
+
+pre {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--press);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font: 14px/1.6 var(--mono);
+  max-width: 100%;
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+/* ---------------------------------------------------------------- layout */
+.wrap { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 0 clamp(32px, 6vw, 88px); max-width: 74rem; margin: 0 auto; padding: 0 24px; }
+
+.contents { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 40px 0; font-size: 15px; }
+.contents__mark { display: block; font-family: "Fraunces", Georgia, serif; font-size: 1.15rem; letter-spacing: -.01em; text-decoration: none; color: inherit; margin-bottom: 1.4em; }
+.contents ol { list-style: none; margin: 0; padding: 0; }
+.contents li { margin: 0 0 .1em; }
+.contents a { display: block; padding: 4px 0; color: var(--ink-soft); text-decoration: none; border-left: 2px solid transparent; padding-left: 12px; margin-left: -14px; }
+.contents a:hover { color: var(--ink); }
+.contents a[aria-current="true"] { color: var(--ink); border-left-color: var(--press); }
+.contents__meta { margin-top: 2em; padding-top: 1.2em; border-top: 1px solid var(--rule); color: var(--ink-soft); font-size: 14px; }
+.contents__meta a { color: var(--press); display: inline; padding: 0; margin: 0; border: 0; text-decoration: underline; }
+
+main { padding: 40px 0 120px; min-width: 0; }
+section { scroll-margin-top: 24px; }
+
+/* ------------------------------------------------------------------ hero */
+.hero { padding: clamp(28px, 6vw, 72px) 0 8px; }
+.hero p.standfirst { font-size: clamp(1.15rem, 2.2vw, 1.4rem); line-height: 1.5; color: var(--ink-soft); max-width: 34ch; }
+
+/* The one bold thing on the page: a line you can actually edit, pressed into the paper. */
+.press-sheet {
+  margin: 40px 0 8px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 28px clamp(20px, 4vw, 40px) 22px;
+  box-shadow: inset 0 2px 0 var(--impression);
+}
+.press-sheet [contenteditable] {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(1.4rem, 3.4vw, 2.05rem);
+  font-variation-settings: "SOFT" 20, "WONK" 1;
+  line-height: 1.25;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 2px;
+  outline: 1px dashed rgba(27, 52, 184, .45);
+  outline-offset: 4px;
+  cursor: text;
+}
+:root:not([data-theme="light"]) .press-sheet [contenteditable] { outline-color: rgba(151, 166, 255, .5); }
+.press-sheet [contenteditable]:focus { outline-style: solid; background: rgba(27, 52, 184, .06); }
+.press-sheet figcaption { margin-top: 18px; color: var(--ink-soft); font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; }
+.press-sheet button {
+  font: inherit; font-size: 14px; color: var(--press); background: none;
+  border: 0; border-bottom: 1px solid currentColor; padding: 0; cursor: pointer;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 0; }
+.actions a {
+  display: inline-block; padding: 11px 20px; border-radius: 2px; text-decoration: none;
+  border: 1px solid var(--press); font-size: 15px;
+}
+.actions a:first-child { background: var(--press); color: var(--paper); }
+.actions a + a { color: var(--press); }
+
+/* ---------------------------------------------------------------- tables */
+table { border-collapse: collapse; width: 100%; margin: 1.4em 0; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--rule); }
+th { font-weight: 600; white-space: nowrap; }
+td code { white-space: nowrap; }
+.tick { color: var(--press); }
+
+/* steps: install really is a sequence, so it is numbered */
+.steps { counter-reset: step; list-style: none; padding: 0; }
+.steps > li { counter-increment: step; position: relative; padding-left: 46px; margin: 0 0 2.4em; max-width: none; }
+.steps > li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: 1px;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  font: 600 14px/1 var(--sans);
+  color: var(--paper); background: var(--ink); border-radius: 50%;
+}
+.steps h3 { margin-top: 0; }
+
+figure.shot { margin: 2em 0; }
+figure.shot img { width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 2px; display: block; }
+figure.shot figcaption { margin-top: .6em; color: var(--ink-soft); font-size: 14px; }
+
+.note {
+  border-left: 3px solid var(--press);
+  background: var(--paper-raised);
+  padding: 14px 18px; margin: 1.6em 0; font-size: 15px;
+}
+.note p { margin: 0; max-width: none; }
+.note p + p { margin-top: .7em; }
+
+footer.page { border-top: 1px solid var(--rule); margin-top: 5em; padding-top: 1.6em; color: var(--ink-soft); font-size: 15px; }
+
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); }
+  .contents { position: static; height: auto; padding: 24px 0 0; border-bottom: 1px solid var(--rule); }
+  .contents ol { display: flex; flex-wrap: wrap; gap: 0 18px; }
+  .contents a { border-left: 0; padding-left: 0; margin-left: 0; }
+  .contents a[aria-current="true"] { border-left: 0; text-decoration: underline; }
+  .contents__meta { display: none; }
+  main { padding-top: 16px; }
+}

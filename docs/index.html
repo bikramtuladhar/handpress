@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handpress — edit a static site in place, in the browser</title>
+<meta name="description" content="Handpress makes a hand-written static site editable in the browser. No CMS, no build step, no database: every save is a git commit. Install, configuration and API reference.">
+<link rel="canonical" href="https://bikramtuladhar.github.io/handpress/">
+<meta property="og:title" content="Handpress — edit a static site in place">
+<meta property="og:description" content="Let a client edit the real pages of a hand-written site. Every save is a git commit.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="contents" aria-label="Contents">
+  <a class="contents__mark" href="#top">Handpress</a>
+  <ol>
+    <li><a href="#what">What it is</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#options">Options</a></li>
+    <li><a href="#cli">Command line</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#hooks">Hooks</a></li>
+    <li><a href="#hosts">Other hosts</a></li>
+    <li><a href="#api">API</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="#agents">For AI agents</a></li>
+    <li><a href="#limits">Limits</a></li>
+  </ol>
+  <p class="contents__meta">
+    <a href="https://github.com/bikramtuladhar/handpress">GitHub</a> ·
+    <a href="https://www.npmjs.com/package/handpress">npm</a><br>
+    MIT licensed
+  </p>
+</nav>
+
+<main id="top">
+
+  <header class="hero">
+    <h1>Handpress</h1>
+    <p class="standfirst">Let a client edit a hand-written static site — the real pages, in place, in the browser.</p>
+
+    <figure class="press-sheet">
+      <p contenteditable="true" spellcheck="false" id="try">Click this line and type. That is the whole idea.</p>
+      <figcaption>
+        <span>That is what editing a Handpress page feels like — except there, pressing Save commits the file.</span>
+        <button type="button" id="reset-try">Put it back</button>
+      </figcaption>
+    </figure>
+
+    <p class="actions">
+      <a href="https://handpress-demo.bikramtuladhar2011.workers.dev">Open the full demo</a>
+      <a href="#install">Install it</a>
+    </p>
+  </header>
+
+  <section id="what">
+    <h2>What it is</h2>
+    <p>Handpress adds an editor to a static site you wrote by hand. Someone with no technical
+      knowledge signs in with Google, clicks the page, and types. Saving writes the HTML files
+      and commits them to your repository.</p>
+    <p>Most content systems ask you to break a design into templates and move the words into a
+      database. That is the right trade for a publication with a thousand posts. It is the wrong
+      trade for ten careful pages where the layout is the product, and the owner wants to fix a
+      date or swap a photograph twice a year.</p>
+
+    <table>
+      <tr><th>No templating</th><td>Your markup is untouched apart from a small <code>data-e</code> key on each editable element.</td></tr>
+      <tr><th>No database</th><td>Files in git. Undo is <code>git revert</code>. Your backups are your repository.</td></tr>
+      <tr><th>No build</th><td>One JavaScript file, loaded only for signed-in editors. Visitors download nothing.</td></tr>
+      <tr><th>Clean diffs</th><td>A changed sentence is a one-line diff you can review in a pull request.</td></tr>
+      <tr><th>Design holds</th><td>New entries are copies of existing ones, so nobody invents a layout by accident.</td></tr>
+    </table>
+  </section>
+
+  <section id="demo">
+    <h2>Demo</h2>
+    <p>The <a href="https://handpress-demo.bikramtuladhar2011.workers.dev">demo</a> is a small
+      bakery site with the real editor on it. No sign-up: it answers the editor's requests inside
+      your own browser and keeps changes in your browser's storage, so you can edit freely and
+      press <em>Reset the site</em> when you are done.</p>
+
+    <figure class="shot">
+      <img src="images/editing.png" alt="A page of the demo site with dashed outlines around each editable block and an editor bar along the bottom of the window." loading="lazy" width="2400" height="1560">
+      <figcaption>Click any text and type. The bar carries bold, italic, links, page settings and Save.</figcaption>
+    </figure>
+
+    <figure class="shot">
+      <img src="images/lists.png" alt="Two product cards side by side, one highlighted, with small duplicate, move and delete buttons in its corner." loading="lazy" width="2400" height="1560">
+      <figcaption>Hover anything repeating — cards, list items, paragraphs, buttons — to duplicate, move or delete it.</figcaption>
+    </figure>
+
+    <figure class="shot">
+      <img src="images/site-data.png" alt="A panel on the right of the page showing a form built from a JSON data file, with fields for day, place and hours." loading="lazy" width="2400" height="1560">
+      <figcaption>Lists a site renders from data — events, products, opening times — get a form instead of markup editing.</figcaption>
+    </figure>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p>Handpress has two halves: two files in your site, and a small server that commits. The
+      example below is Cloudflare Workers; <a href="#hosts">other hosts</a> work too.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Put the editor in your site</h3>
+<pre><code>npm i -D handpress
+npx handpress install ./public</code></pre>
+        <p>That writes <code>editor.js</code> and <code>admin.html</code> into your site directory. Commit them.</p>
+      </li>
+
+      <li>
+        <h3>Key your pages</h3>
+<pre><code>npx handpress keys "public/*.html" --global "header, footer"</code></pre>
+        <p><code>--global</code> names the blocks repeated on every page. Their keys line up across
+          pages, so editing the footer once changes all of them.</p>
+        <div class="note">
+          <p>This rewrites your HTML: it adds the keys <em>and</em> normalises the markup to exactly
+            what a browser writes back (<code>defer=""</code>, <code>&amp;amp;</code>, closed tags).</p>
+          <p>Commit that reformat on its own, before any content change, or your first content diff
+            will be unreadable. Re-run the command after hand-editing HTML; existing keys are never renumbered.</p>
+        </div>
+      </li>
+
+      <li>
+        <h3>Load the editor for editors only</h3>
+<pre><code>if (/(?:^|;\s*)ed=1/.test(document.cookie)) {
+  var s = document.createElement('script');
+  s.src = '/editor.js'; s.defer = true;
+  document.head.appendChild(s);
+}</code></pre>
+        <p>The <code>ed</code> cookie is only a hint that says "show the editor". Every read and write
+          is checked on the server against an HttpOnly session, so a visitor setting the cookie by
+          hand gets nothing.</p>
+      </li>
+
+      <li>
+        <h3>Configure the server</h3>
+        <p>Point a Worker at <code>node_modules/handpress/src/worker.js</code> and describe what may be edited:</p>
+<pre><code>"vars": {
+  "GITHUB_REPO": "you/your-site",
+  "GITHUB_BRANCH": "main",
+  "GOOGLE_CLIENT_ID": "…apps.googleusercontent.com",
+  "EDITOR": {
+    "pages": ["index.html", "about.html"],
+    "dataFiles": { "data.js": "Opening times" },
+    "globalBlocks": ["header", "footer"],
+    "uploadDir": "uploads"
+  }
+}</code></pre>
+<pre><code>wrangler secret put GITHUB_TOKEN     # fine-grained, this repo only, Contents: read and write
+wrangler secret put SESSION_SECRET   # openssl rand -hex 32
+wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed to edit</code></pre>
+      </li>
+
+      <li>
+        <h3>Set up sign-in</h3>
+        <p>In the Google Cloud console, create an OAuth client ID of type <em>Web application</em>
+          and add your site's origin under <em>Authorized JavaScript origins</em>. Put the client ID
+          in <code>GOOGLE_CLIENT_ID</code>.</p>
+        <p>Deploy, then visit <code>/admin</code> and sign in.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="options">
+    <h2>Options</h2>
+    <p>Everything the editor may touch is declared in the <code>EDITOR</code> object. Anything not
+      listed cannot be read or written, by anyone, including a signed-in admin.</p>
+
+    <table>
+      <thead><tr><th>Option</th><th>Type</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>pages</code></td><td>string[]</td><td>The pages that can be edited, as repository paths. Required.</td></tr>
+        <tr><td><code>dataFiles</code></td><td>object</td><td>Path to label, for each data file. A data file is <code>window.NAME&nbsp;=&nbsp;{ …&nbsp;valid JSON&nbsp;… };</code> — the label is what the editor shows in its Site data panel.</td></tr>
+        <tr><td><code>globalBlocks</code></td><td>string[]</td><td>Selectors for blocks repeated on every page (<code>header</code>, <code>footer</code>, <code>#menu</code>). Edited once, written to every page, with the current page's nav link marked.</td></tr>
+        <tr><td><code>uploadDir</code></td><td>string</td><td>Where new images are committed. Only <code>jpg</code>, <code>png</code>, <code>webp</code>, <code>gif</code> and <code>svg</code>, and only in this directory.</td></tr>
+        <tr><td><code>forceVisible</code></td><td>string</td><td>A CSS selector kept visible while editing. Set it if you animate elements into view, or the editor's owner cannot click what has not appeared yet.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Environment</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Where</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td><code>GITHUB_REPO</code></td><td>var</td><td><code>owner/repo</code> that saves are committed to.</td></tr>
+        <tr><td><code>GITHUB_BRANCH</code></td><td>var</td><td>Branch to read and commit, usually <code>main</code>.</td></tr>
+        <tr><td><code>GOOGLE_CLIENT_ID</code></td><td>var</td><td>OAuth client ID used by the sign-in page.</td></tr>
+        <tr><td><code>GITHUB_TOKEN</code></td><td>secret</td><td>Fine-grained token, that repository only, Contents: read and write.</td></tr>
+        <tr><td><code>SESSION_SECRET</code></td><td>secret</td><td>Signs the session cookie. Any long random string.</td></tr>
+        <tr><td><code>ADMIN_EMAILS</code></td><td>secret</td><td>Comma-separated Google addresses allowed to edit.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="cli">
+    <h2>Command line</h2>
+    <table>
+      <tr><td><code>handpress install &lt;dir&gt;</code></td><td>Copies <code>editor.js</code> and <code>admin.html</code> into your site. Re-run after upgrading the package.</td></tr>
+      <tr><td><code>handpress keys "&lt;glob&gt;" [--global "header, footer"]</code></td><td>Adds the editing keys. Idempotent: existing keys are kept, new elements get new ones. Skips <code>admin.html</code>.</td></tr>
+    </table>
+
+    <h3>What the keys mean</h3>
+    <table>
+      <tr><td><code>data-e="t12"</code></td><td>A block of text, edited in place.</td></tr>
+      <tr><td><code>data-e="m12"</code></td><td>An image: replaceable, with its alt text.</td></tr>
+      <tr><td><code>data-e="i12"</code></td><td>An item of a repeating list that is not itself text.</td></tr>
+      <tr><td><code>data-e-list</code></td><td>A container whose children can be duplicated, moved and deleted.</td></tr>
+      <tr><td><code>data-e="gt12"</code></td><td>The <code>g</code> prefix marks a key inside a global block, shared across pages.</td></tr>
+    </table>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p>Three pieces: a script that keys your pages, the editor in the browser, and a server that commits.</p>
+
+    <h3>Why the editor keeps two copies of the page</h3>
+    <p>A live page has been rearranged by your own JavaScript: lists rendered, counters animated,
+      classes toggled. Saving what is on screen would bake all of that into the file, and your
+      markup would rot a little with every save.</p>
+    <p>So the editor fetches the page's <em>source</em> and keeps it as a second, script-free DOM.
+      Each edit is applied to both: to the live page so the editor sees it, and to the source so
+      what gets written is clean HTML. The live page is a preview; the source is the truth.</p>
+    <p>That is also why keys exist. They are how an element in the live page is matched with the
+      same element in the file, even after your scripts have moved things around.</p>
+  </section>
+
+  <section id="hooks">
+    <h2>Hooks</h2>
+    <p>If your own scripts fight the editor, set <code>window.EDITOR_HOOKS</code> before
+      <code>editor.js</code> loads.</p>
+<pre><code>window.EDITOR_HOOKS = {
+  // Before an element becomes editable. Return a replacement to use instead.
+  // Here: detach a counter from the animation that would overwrite what is typed.
+  beforeEdit(el) {
+    const fresh = el.cloneNode(false);
+    el.replaceWith(fresh);
+    return fresh;
+  },
+
+  // When edited text is copied back to the source, for attributes that must follow it.
+  syncUnit(sourceEl, liveEl) {
+    sourceEl.setAttribute('data-count-to', parseInt(sourceEl.textContent, 10));
+  }
+};</code></pre>
+    <div class="note">
+      <p><strong>Text reverts after saving?</strong> Your script rewrites that element. Use <code>beforeEdit</code>.</p>
+      <p><strong>Elements invisible while editing?</strong> A reveal-on-scroll animation. Set <code>forceVisible</code>.</p>
+    </div>
+  </section>
+
+  <section id="hosts">
+    <h2>Other hosts</h2>
+    <p>The Cloudflare Worker is the reference server, but the browser half does not care what
+      answers it. On ordinary shared hosting with Apache and PHP, saves publish
+      <strong>instantly</strong>, because the files are right there — no deploy to wait for.</p>
+    <p>That version writes each file, then runs <code>git commit</code> and pushes, so the history
+      and the offsite copy are the same as on Cloudflare.
+      <a href="https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md">Full notes for other hosts</a>,
+      including the Apache configuration that hides your repository from the web and stops uploads
+      from being executed.</p>
+  </section>
+
+  <section id="api">
+    <h2>API</h2>
+    <p>Re-implement these six endpoints and the editor will work anywhere.</p>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /api/config</code></td><td>Returns the options above, plus the Google client ID. Public; no secrets.</td></tr>
+        <tr><td><code>POST /api/login</code></td><td>Takes <code>{credential}</code>, a Google ID token. Verifies it, checks the admin list, sets the session and the <code>ed</code> cookie.</td></tr>
+        <tr><td><code>POST /api/logout</code></td><td>Clears both.</td></tr>
+        <tr><td><code>GET /api/me</code></td><td><code>{email}</code>, or 401.</td></tr>
+        <tr><td><code>GET /api/file?path=</code></td><td><code>{path, content, sha}</code>. Refuses anything not on the allowlist.</td></tr>
+        <tr><td><code>POST /api/save</code></td><td><code>{files:[{path, content | base64, sha}], message}</code>. All files or none.</td></tr>
+      </tbody>
+    </table>
+    <p><code>sha</code> is opaque to the editor: any value that changes when the file changes works.
+      On Cloudflare it is the GitHub blob sha; on a normal server, a hash of the file.</p>
+  </section>
+
+  <section id="security">
+    <h2>Security</h2>
+    <p>The trust boundary is the admin list. Anyone on it can change any editable file, and editing
+      HTML means they could insert a script. Keep the list short, and remove people when they stop
+      being editors.</p>
+    <p>Everything else is closed by default:</p>
+    <table>
+      <tr><th>Allowlist</th><td>Any path outside <code>pages</code>, <code>dataFiles</code> and <code>uploadDir</code> is refused for reads and writes, including for a signed-in admin.</td></tr>
+      <tr><th>Sign-in</th><td>A Google ID token that Google validates, plus a match on the admin list. There is no password to guess.</td></tr>
+      <tr><th>Session</th><td>HttpOnly, Secure, SameSite=Strict — which is also why no CSRF token is needed — and writes must be JSON, which a cross-site form cannot send.</td></tr>
+      <tr><th>Concurrent saves</th><td>Every save carries the hash each file was loaded at. If someone saved in between, the whole save is refused rather than overwriting their work.</td></tr>
+      <tr><th>Uploads</th><td>Limited by extension and directory. On a host that executes files, also deny execution in that directory — and test it by uploading a <code>.php</code> file and a <code>.jpg</code> containing code.</td></tr>
+    </table>
+  </section>
+
+  <section id="agents">
+    <h2>For AI agents</h2>
+    <p>Handpress ships a skill describing when it fits, how to install it, the failure modes, and
+      what to verify before handing a site to its owner.</p>
+<pre><code>npx skills add bikramtuladhar/handpress</code></pre>
+    <p>That installs it for Claude Code, Cursor, Codex, OpenCode and others. To use it without
+      installing: <code>npx skills use bikramtuladhar/handpress@handpress | claude</code>.
+      There is also <a href="llms.txt">llms.txt</a>, a plain-text summary of this page.</p>
+  </section>
+
+  <section id="limits">
+    <h2>Limits</h2>
+    <p>Deliberately missing, so you can judge it honestly:</p>
+    <table>
+      <tr><th>No drafts</th><td>Saving publishes. The git history is the undo. If you need staging, point the server at a branch and merge when you approve.</td></tr>
+      <tr><th>No workflow</th><td>No review or approval step, and no roles beyond "may edit".</td></tr>
+      <tr><th>One editor at a time</th><td>A second concurrent save is refused, not merged.</td></tr>
+      <tr><th>No content types</th><td>Pages are pages. Structured lists live in a data file.</td></tr>
+      <tr><th>Small sites</th><td>Built for tens of pages, not thousands.</td></tr>
+    </table>
+    <p>If those matter to you, use a content management system. If they do not, this is a great deal
+      less machinery.</p>
+  </section>
+
+  <footer class="page">
+    <p>Handpress is MIT licensed.
+      <a href="https://github.com/bikramtuladhar/handpress">Source and issues on GitHub</a> ·
+      <a href="https://www.npmjs.com/package/handpress">npm</a> ·
+      <a href="https://handpress-demo.bikramtuladhar2011.workers.dev">Demo</a></p>
+  </footer>
+</main>
+</div>
+
+<script>
+  // The heading at the top is really editable; put it back when asked.
+  var tryLine = document.getElementById('try');
+  var original = tryLine.textContent;
+  document.getElementById('reset-try').addEventListener('click', function () {
+    tryLine.textContent = original;
+    tryLine.focus();
+  });
+
+  // Mark the section being read in the contents.
+  var links = Array.prototype.slice.call(document.querySelectorAll('.contents a[href^="#"]'));
+  var seen = new Map();
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { seen.set(e.target.id, e.isIntersecting); });
+    var current = links.find(function (a) { return seen.get(a.getAttribute('href').slice(1)); });
+    links.forEach(function (a) { a.setAttribute('aria-current', String(a === current)); });
+  }, { rootMargin: '-10% 0px -70% 0px' });
+  document.querySelectorAll('main section[id]').forEach(function (s) { observer.observe(s); });
+</script>
+</body>
+</html>

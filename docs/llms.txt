@@ -1,0 +1,63 @@
+# Handpress
+
+> Adds an in-place editor to a hand-written static site. A non-technical owner signs in with
+> Google, clicks the page and types; saving writes the HTML files and commits them to git.
+> No templating, no database, no build step.
+
+Use it for: small hand-built sites (tens of pages), one or two editors, a design that matters.
+Do not use it for: hundreds of pages, many simultaneous authors, drafts or approval workflow,
+content already in a database or a framework's content collection.
+
+## Install
+
+```
+npm i -D handpress
+npx handpress install ./public                                # editor.js + admin.html
+npx handpress keys "public/*.html" --global "header, footer"  # adds data-e keys; re-run after hand-editing HTML
+```
+
+Load the editor only for editors, in the site's own script:
+
+```
+if (/(?:^|;\s*)ed=1/.test(document.cookie)) {
+  var s = document.createElement('script'); s.src = '/editor.js'; s.defer = true;
+  document.head.appendChild(s);
+}
+```
+
+Server: a Cloudflare Worker (src/worker.js), or any host implementing the six endpoints below.
+Configure with vars GITHUB_REPO, GITHUB_BRANCH, GOOGLE_CLIENT_ID and an EDITOR object of
+{pages, dataFiles, globalBlocks, uploadDir, forceVisible}; secrets GITHUB_TOKEN, SESSION_SECRET,
+ADMIN_EMAILS. Sign-in needs a Google OAuth client with the site's origin as an authorised origin.
+
+## API
+
+- GET  /api/config        {pages, dataFiles, globalBlocks, uploadDir, forceVisible, clientId}
+- POST /api/login         {credential} Google ID token -> session cookie + readable `ed=1` cookie
+- POST /api/logout
+- GET  /api/me            {email} or 401
+- GET  /api/file?path=    {path, content, sha}; refuses anything off the allowlist
+- POST /api/save          {files:[{path, content|base64, sha}], message}; all files or none
+
+## Keys
+
+data-e="t12" text block · "m12" image · "i12" list item · data-e-list repeating container ·
+a "g" prefix (gt12) means the element is inside a global block shared by every page.
+
+## Design notes
+
+The editor keeps two DOMs: the live page, and the page's source fetched from the server. Edits
+apply to both, and only the source is saved, so a site's own JavaScript (rendered lists,
+animated counters) never gets written into the files. Keys are how the two are matched.
+
+Per-site quirks go in window.EDITOR_HOOKS: beforeEdit(el) to detach an element the site
+animates, syncUnit(sourceEl, liveEl) to keep an attribute in step with edited text.
+
+## Links
+
+- Documentation: https://bikramtuladhar.github.io/handpress/
+- Demo (no sign-up, edits stay in your browser): https://handpress-demo.bikramtuladhar2011.workers.dev
+- Source: https://github.com/bikramtuladhar/handpress
+- npm: https://www.npmjs.com/package/handpress
+- Agent skill: npx skills add bikramtuladhar/handpress
+- Other hosts (Apache/PHP): https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md
