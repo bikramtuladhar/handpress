@@ -1,0 +1,7 @@
+{
+  // Static files only: the demo has no backend at all. sandbox.js answers the editor's
+  // API calls inside the visitor's browser.
+  "name": "handpress-demo",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "." }
+}

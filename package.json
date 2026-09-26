@@ -1,19 +1,22 @@
 {
-  "name": "static-site-editor",
+  "name": "handpress",
   "version": "0.1.0",
-  "description": "Edit a hand-written static site in place, in the browser. Saves are git commits.",
+  "description": "Edit your hand-written static site in place, in the browser. Saves are git commits.",
   "type": "module",
   "license": "MIT",
   "files": [
     "src",
-    "README.md"
+    "scripts",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "node test.mjs",
-    "keys": "node src/annotate.mjs \"example/site/index.html\" \"example/site/about.html\" --global \"header, footer\"",
-    "example": "node scripts/install.mjs example/site && wrangler dev --config example/wrangler.jsonc",
-    "install-assets": "node scripts/install.mjs",
-    "test:browser": "node test/browser.mjs"
+    "keys": "node scripts/cli.mjs keys \"example/site/index.html\" \"example/site/about.html\" --global \"header, footer\"",
+    "example": "node scripts/cli.mjs install example/site && wrangler dev --config example/wrangler.jsonc",
+    "test:browser": "node test/browser.mjs",
+    "demo:build": "node scripts/build-demo.mjs",
+    "demo:deploy": "node scripts/build-demo.mjs && wrangler deploy --config demo/wrangler.jsonc"
   },
   "devDependencies": {
     "parse5": "^8.0.0",
@@ -21,6 +24,22 @@
   },
   "dependencies": {},
   "bin": {
-    "static-site-editor-install": "scripts/install.mjs"
+    "handpress": "scripts/cli.mjs"
+  },
+  "keywords": [
+    "cms",
+    "static-site",
+    "editable",
+    "contenteditable",
+    "git",
+    "cloudflare-workers",
+    "wysiwyg",
+    "inline-editing",
+    "no-build",
+    "html"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bikramtuladhar/handpress.git"
   }
 }

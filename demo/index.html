@@ -1,0 +1,66 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wildflower Bakery</title>
+<meta name="description" content="A small bakery, an example of a site that edits itself.">
+<link rel="stylesheet" href="style.css">
+<script src="data.js" defer=""></script>
+<script src="sandbox.js"></script>
+<script src="site.js" defer=""></script>
+<style>
+  #demo-banner { position: fixed; inset: 0 0 auto 0; z-index: 2147482000; display: flex; flex-wrap: wrap;
+    gap: 10px 16px; align-items: center; justify-content: space-between; padding: 10px 16px;
+    background: #23201b; color: #f6efe3; font: 14px/1.4 system-ui, sans-serif; }
+  #demo-banner a, #demo-banner button { color: inherit; font: inherit; text-decoration: underline; }
+  #demo-banner button { background: none; border: 0; cursor: pointer; padding: 0; }
+  .demo-actions { display: flex; gap: 16px; }
+  body { padding-top: 52px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/" data-e="gt1">Wildflower Bakery</a>
+  <nav><ul data-e-list="">
+    <li data-e="gt2"><a href="/">Home</a></li>
+    <li data-e="gt3"><a href="/about">About</a></li>
+  </ul></nav>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="label" data-e="t1">Since 2011</p>
+    <h1 data-e="t2">Bread, slowly</h1>
+    <p class="lede" data-e="t3">Four loaves, two pastries, one oven. We open at seven and stop when the shelves are empty.</p>
+    <p data-e="t4"><a class="btn" href="/about">Our story</a></p>
+  </section>
+
+  <section>
+    <h2 data-e="t5">This week</h2>
+    <div class="cards" data-e-list="">
+      <article class="card" data-e="i12">
+        <img src="loaf.svg" width="320" height="200" alt="A round sourdough loaf." data-e="m6">
+        <h3 data-e="t7">Country sourdough</h3>
+        <p data-e="t8">Three days, one starter, a dark crust.</p>
+      </article>
+      <article class="card" data-e="i13">
+        <img src="loaf.svg" width="320" height="200" alt="A seeded rye loaf." data-e="m9">
+        <h3 data-e="t10">Seeded rye</h3>
+        <p data-e="t11">Caraway, linseed and a close crumb.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Filled from data.js: the kind of content that belongs in the data file, not the markup. -->
+  <section>
+    <h2 data-e="t14">Where to find us</h2>
+    <ul data-markets=""></ul>
+  </section>
+</main>
+
+<footer>
+  <p data-e="gt6">Wildflower Bakery · 14 Mill Lane</p>
+  <p data-e="gt7"><a href="mailto:hello@example.com">hello@example.com</a></p>
+</footer>
+
+
+</body></html>

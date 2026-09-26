@@ -1,5 +1,5 @@
 {
-  "name": "static-site-editor-example",
+  "name": "handpress-example",
   "main": "../src/worker.js",
   "compatibility_date": "2026-09-01",
   // The site itself. run_worker_first keeps /api/* with the Worker; everything else is a file.
