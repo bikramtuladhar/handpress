@@ -165,7 +165,10 @@ footer.page { border-top: 1px solid var(--rule); margin-top: 5em; padding-top: 1
 @media (max-width: 860px) {
   .wrap { grid-template-columns: minmax(0, 1fr); }
   .contents { position: static; height: auto; padding: 24px 0 0; border-bottom: 1px solid var(--rule); }
-  .contents ol { display: flex; flex-wrap: wrap; gap: 0 18px; }
+  .contents ol { display: flex; flex-wrap: nowrap; gap: 0 20px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .contents ol::-webkit-scrollbar { display: none; }
+  .contents li { white-space: nowrap; }
+  .contents__mark { margin-bottom: .6em; }
   .contents a { border-left: 0; padding-left: 0; margin-left: 0; }
   .contents a[aria-current="true"] { border-left: 0; text-decoration: underline; }
   .contents__meta { display: none; }
