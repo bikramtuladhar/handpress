@@ -54,7 +54,7 @@ assert.match(once, /<p data-e="gt\d+">© 2026<\/p>/, 'footer keys are global');
 assert.ok(!/<body[^>]*data-e=/.test(once), 'body itself is never a unit');
 
 // the example site ships keyed
-for (const f of fs.globSync('example/site/*.html')) {
+for (const f of fs.globSync('example/site/*.html').filter(f => !f.endsWith('admin.html'))) {
   const html = fs.readFileSync(f, 'utf8');
   assert.equal(annotate(html, { globals: ['header', 'footer'] }), html, `${f}: run npm run keys`);
 }

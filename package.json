@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "test": "node test.mjs",
-    "keys": "node src/annotate.mjs \"example/site/*.html\" --global \"header, footer\"",
+    "keys": "node src/annotate.mjs \"example/site/index.html\" \"example/site/about.html\" --global \"header, footer\"",
     "example": "node scripts/install.mjs example/site && wrangler dev --config example/wrangler.jsonc",
     "install-assets": "node scripts/install.mjs",
     "test:browser": "node test/browser.mjs"
