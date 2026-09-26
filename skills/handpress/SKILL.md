@@ -80,9 +80,10 @@ On Cloudflare, point a Worker at `node_modules/handpress/src/worker.js` and conf
 Secrets: `GITHUB_TOKEN` (fine-grained, that repo only, Contents read+write), `SESSION_SECRET`
 (`openssl rand -hex 32`), `ADMIN_EMAILS`.
 
-On ordinary shared hosting (Apache/PHP), follow `docs/other-hosts.md` in the repo: the same six
-endpoints, writing files directly, then `git commit`. That version publishes instantly, with no
-deploy wait.
+On ordinary shared hosting (cPanel, Apache, PHP 8.1+), install the server half with
+`npx handpress install ./public_html --php` — it adds `api.php`, the two `.htaccess` templates and
+a sample settings file that belongs ONE level above the web root. Saves publish instantly there,
+with no deploy wait. Full walkthrough: https://bikramtuladhar.github.io/handpress/cpanel.html
 
 Sign-in needs a Google OAuth client (Web application) with the site's origin listed under
 Authorized JavaScript origins.

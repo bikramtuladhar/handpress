@@ -28,6 +28,7 @@
     <li><a href="#how">How it works</a></li>
     <li><a href="#hooks">Hooks</a></li>
     <li><a href="#hosts">Other hosts</a></li>
+    <li><a href="cpanel.html">On cPanel</a></li>
     <li><a href="#api">API</a></li>
     <li><a href="#security">Security</a></li>
     <li><a href="#agents">For AI agents</a></li>
@@ -262,9 +263,12 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
       <strong>instantly</strong>, because the files are right there — no deploy to wait for.</p>
     <p>That version writes each file, then runs <code>git commit</code> and pushes, so the history
       and the offsite copy are the same as on Cloudflare.
-      <a href="https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md">Full notes for other hosts</a>,
-      including the Apache configuration that hides your repository from the web and stops uploads
-      from being executed.</p>
+      <a href="cpanel.html">Step-by-step guide for cPanel hosting</a> — including the Apache rules
+      that hide your repository from the web and stop uploads from being executed, and what to do
+      when the plan has no SSH access. <a href="https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md">Notes
+      for other hosts</a> cover Node and anything else.</p>
+    <p>Install the server half with <code>npx handpress install ./public_html --php</code>: it adds
+      <code>api.php</code>, the two Apache templates and a sample settings file.</p>
   </section>
 
   <section id="api">

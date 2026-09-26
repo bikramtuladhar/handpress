@@ -303,8 +303,16 @@
       r.readAsDataURL(blob);
     });
   }
+  function slug(name) {
+    return name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'image';
+  }
   // Big photos are scaled to 2000px on the long side before upload; small ones go up as they are.
   async function prepareImage(file) {
+    if (file.type === 'image/svg+xml') {            // vector: no bitmap to resize, keep the file as it is
+      var svgPath = UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.svg';
+      uploads[svgPath] = await fileToBase64(file);
+      return { path: svgPath, url: URL.createObjectURL(file), w: 0, h: 0 };
+    }
     var bmp = await createImageBitmap(file);
     var scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
     var w = Math.round(bmp.width * scale), hgt = Math.round(bmp.height * scale);
@@ -317,8 +325,7 @@
       ext = type === 'image/webp' ? 'webp' : 'jpg';
       blob = await new Promise(function (ok) { c.toBlob(ok, type, 0.85); });
     }
-    var name = file.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'image';
-    var path = UPLOAD_DIR + '/' + name + '-' + Math.random().toString(36).slice(2, 6) + '.' + ext;
+    var path = UPLOAD_DIR + '/' + slug(file.name) + '-' + Math.random().toString(36).slice(2, 6) + '.' + ext;
     uploads[path] = await fileToBase64(blob);
     return { path: path, url: URL.createObjectURL(blob), w: w, h: hgt };
   }
@@ -350,7 +357,7 @@
             if (!n) return;
             n.setAttribute('src', i ? up.url : up.path);
             n.removeAttribute('srcset');
-            if (n.hasAttribute('width')) { n.setAttribute('width', up.w); n.setAttribute('height', up.h); }
+            if (up.w && n.hasAttribute('width')) { n.setAttribute('width', up.w); n.setAttribute('height', up.h); }
           });
         });
         $$('a', scope).forEach(function (sa) {

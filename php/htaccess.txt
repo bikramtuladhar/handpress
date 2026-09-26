@@ -1,0 +1,33 @@
+# Handpress on Apache. Copy to .htaccess in your web root (cPanel: File Manager → Settings →
+# "Show hidden files", or upload it as htaccess.txt and rename it there).
+
+DirectoryIndex index.html
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^api/([a-z-]+)/?$ api.php?route=$1 [QSA,L]
+
+  # Clean URLs: /about serves about.html, and about.html redirects to /about.
+  # Delete this block if your links already end in .html.
+  RewriteCond %{THE_REQUEST} \s/index\.html[\s?] [NC]
+  RewriteRule ^index\.html$ / [R=301,L]
+  RewriteCond %{THE_REQUEST} \s/([a-z0-9-]+)\.html[\s?] [NC]
+  RewriteRule ^([a-z0-9-]+)\.html$ /$1 [R=301,L]
+  RewriteCond %{REQUEST_FILENAME}.html -f
+  RewriteRule ^([a-z0-9-]+)/?$ $1.html [L]
+</IfModule>
+
+# If your repository is checked out in the web root, everything in it is downloadable
+# unless you say otherwise. Add anything else of yours that is not the website.
+RedirectMatch 404 (?i)^/(\.git|\.github|node_modules|scripts|test)(/|$)
+RedirectMatch 404 (?i)^/(package(-lock)?\.json|.*\.md|handpress-config\.php)$
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  # Uncomment once you are happy the site works over HTTPS:
+  # Header always set Strict-Transport-Security "max-age=15552000"
+  # A staging copy should stay out of search results:
+  # SetEnvIf Host ^staging\. IS_STAGING
+  # Header set X-Robots-Tag "noindex, nofollow" env=IS_STAGING
+</IfModule>

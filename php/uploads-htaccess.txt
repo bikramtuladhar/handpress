@@ -1,0 +1,12 @@
+# Handpress uploads. Copy to .htaccess INSIDE your uploads directory.
+# Whatever lands here is served, never executed.
+
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .cgi .pl .py
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .cgi .pl .py
+
+<FilesMatch "^(?!.*\.(?i:jpe?g|png|webp|gif|svg)$).*$">
+  Require all denied
+</FilesMatch>

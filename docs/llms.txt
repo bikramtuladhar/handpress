@@ -25,7 +25,9 @@ if (/(?:^|;\s*)ed=1/.test(document.cookie)) {
 }
 ```
 
-Server: a Cloudflare Worker (src/worker.js), or any host implementing the six endpoints below.
+Server: a Cloudflare Worker (src/worker.js), or PHP on ordinary shared hosting
+(`npx handpress install ./public_html --php` installs php/api.php plus Apache templates; saves
+are live immediately there), or any host implementing the six endpoints below.
 Configure with vars GITHUB_REPO, GITHUB_BRANCH, GOOGLE_CLIENT_ID and an EDITOR object of
 {pages, dataFiles, globalBlocks, uploadDir, forceVisible}; secrets GITHUB_TOKEN, SESSION_SECRET,
 ADMIN_EMAILS. Sign-in needs a Google OAuth client with the site's origin as an authorised origin.
@@ -60,4 +62,5 @@ animates, syncUnit(sourceEl, liveEl) to keep an attribute in step with edited te
 - Source: https://github.com/bikramtuladhar/handpress
 - npm: https://www.npmjs.com/package/handpress
 - Agent skill: npx skills add bikramtuladhar/handpress
-- Other hosts (Apache/PHP): https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md
+- cPanel guide: https://bikramtuladhar.github.io/handpress/cpanel.html
+- Other hosts (Apache/PHP/Node): https://github.com/bikramtuladhar/handpress/blob/main/docs/other-hosts.md

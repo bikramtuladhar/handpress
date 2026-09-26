@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handpress on cPanel hosting</title>
+<meta name="description" content="Step-by-step: run Handpress on ordinary cPanel shared hosting. PHP backend, .htaccess, Google sign-in, and what to do when there is no SSH access.">
+<link rel="canonical" href="https://bikramtuladhar.github.io/handpress/cpanel.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="contents" aria-label="Contents">
+  <a class="contents__mark" href="./">Handpress</a>
+  <ol>
+    <li><a href="#need">What you need</a></li>
+    <li><a href="#upload">1. Put the site on the server</a></li>
+    <li><a href="#files">2. Add the editor</a></li>
+    <li><a href="#config">3. Settings above the web root</a></li>
+    <li><a href="#htaccess">4. Apache rules</a></li>
+    <li><a href="#php">5. PHP version</a></li>
+    <li><a href="#signin">6. Google sign-in</a></li>
+    <li><a href="#check">7. Check it</a></li>
+    <li><a href="#nossh">Without SSH</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+  </ol>
+  <p class="contents__meta">
+    <a href="./">Documentation</a> ·
+    <a href="https://github.com/bikramtuladhar/handpress">GitHub</a><br>
+    MIT licensed
+  </p>
+</nav>
+
+<main id="top">
+  <header class="hero">
+    <h1>Handpress on cPanel</h1>
+    <p class="standfirst">Ordinary shared hosting is the best place to run this: the files are
+      right there, so a save is live the moment the client presses it.</p>
+    <div class="note">
+      <p>On Cloudflare a save waits for a deploy. Here there is nothing to wait for — the editor
+        writes the HTML file, and the next visitor gets it. Git is still used for history, when
+        the host allows it.</p>
+    </div>
+  </header>
+
+  <section id="need">
+    <h2>What you need</h2>
+    <table>
+      <tr><th>Required</th><td>cPanel with <strong>PHP 8.1 or newer</strong> and the <code>curl</code> extension (both are standard), and a domain or subdomain with HTTPS — cPanel's AutoSSL does this free.</td></tr>
+      <tr><th>Nice to have</th><td><strong>Terminal</strong> or SSH access, and <strong>Git Version Control</strong> in cPanel. With them, every save is also a git commit pushed to your repository. Without them, Handpress keeps timestamped backups instead — see <a href="#nossh">Without SSH</a>.</td></tr>
+      <tr><th>On your own machine</th><td>Node, to run the two <code>handpress</code> commands. Nothing is built or compiled; you are only copying files and adding keys.</td></tr>
+    </table>
+    <p>A word on layout. On cPanel your site lives in <code>public_html</code> (or
+      <code>public_html/subdomain</code>), and your home directory is one level above it. That
+      distinction matters: the settings file holds your keys and <strong>must</strong> sit in the
+      home directory, where the web server will not serve it.</p>
+<pre><code>/home/youruser/
+├── handpress-config.php     ← settings and keys, never reachable from the web
+├── handpress-sessions/      ← created automatically
+├── handpress-backups/       ← created automatically
+└── public_html/             ← the site itself
+    ├── index.html
+    ├── about.html
+    ├── editor.js
+    ├── admin.html
+    ├── api.php
+    └── uploads/</code></pre>
+  </section>
+
+  <section id="upload">
+    <h2>1. Put the site on the server</h2>
+    <h3>With Git Version Control (preferred)</h3>
+    <p>In cPanel, open <em>Git Version Control</em> → <em>Create</em>, tick <em>Clone a Repository</em>,
+      give it your repository URL and set the path to <code>public_html</code>. For a private
+      repository, first add the server's key to it: cPanel → <em>SSH Access</em> → <em>Manage SSH Keys</em>,
+      generate a key, then add the public key to your repository as a deploy key with write access.</p>
+    <p>Write access matters: it is what lets each save push back.</p>
+
+    <h3>Without git</h3>
+    <p>Zip your site, upload it in <em>File Manager</em>, and extract it into <code>public_html</code>.
+      Saves will still work; they just won't be committed.</p>
+  </section>
+
+  <section id="files">
+    <h2>2. Add the editor</h2>
+    <p>On your own machine, in your site's repository:</p>
+<pre><code>npm i -D handpress
+npx handpress install ./public_html --php
+npx handpress keys "public_html/*.html" --global "header, footer"</code></pre>
+    <p>The <code>--php</code> flag adds the server half: <code>api.php</code>, the two Apache
+      templates, and a sample settings file placed one level above the site.</p>
+    <p>Then add this to your site's own JavaScript, so visitors never load the editor:</p>
+<pre><code>if (/(?:^|;\s*)ed=1/.test(document.cookie)) {
+  var s = document.createElement('script');
+  s.src = '/editor.js'; s.defer = true;
+  document.head.appendChild(s);
+}</code></pre>
+    <div class="note">
+      <p><code>handpress keys</code> reformats your HTML as well as adding keys. Commit that on its
+        own, before any content change — otherwise your first real edit is buried in a whole-file diff.</p>
+    </div>
+    <p>Commit and push, then pull on the server (Git Version Control → <em>Manage</em> → <em>Pull or Deploy</em>),
+      or upload the changed files by File Manager.</p>
+  </section>
+
+  <section id="config">
+    <h2>3. Settings above the web root</h2>
+    <p>In File Manager, go <strong>up</strong> from <code>public_html</code> to your home directory,
+      rename <code>handpress-config.sample.php</code> to <code>handpress-config.php</code>, and edit it:</p>
+<pre><code>return [
+    'admin_emails' => ['owner@example.com'],
+    'google_client_id' => '…apps.googleusercontent.com',
+
+    'pages' => ['index.html', 'about.html'],
+    'data_files' => ['data.js' => 'Opening times'],
+    'global_blocks' => ['header', 'footer'],
+    'upload_dir' => 'uploads',
+
+    'git' => true,        // false if the host has no shell access
+    'backups' => true,
+];</code></pre>
+    <p>Set its permissions to <strong>600</strong> (File Manager → right-click → Change Permissions,
+      or <code>chmod 600</code>). Only your account needs to read it.</p>
+    <p><code>pages</code> is the allowlist. A page that is not listed cannot be read or written by
+      anyone, including a signed-in admin.</p>
+  </section>
+
+  <section id="htaccess">
+    <h2>4. Apache rules</h2>
+    <p>In File Manager, turn on <em>Settings → Show hidden files (dotfiles)</em>, then:</p>
+    <ol class="steps">
+      <li>
+        <h3>The site's rules</h3>
+        <p>Rename <code>htaccess.txt</code> in <code>public_html</code> to <code>.htaccess</code>.
+          If you already have one — a WordPress install, a redirect — paste the Handpress block at
+          the <strong>top</strong> of the existing file instead of replacing it.</p>
+        <p>It routes <code>/api/…</code> to <code>api.php</code>, gives you clean URLs, and returns
+          404 for the parts of your repository that are not the website (<code>.git</code>,
+          <code>node_modules</code>, Markdown files, the settings file).</p>
+      </li>
+      <li>
+        <h3>The uploads rules</h3>
+        <p>Create the <code>uploads</code> directory inside <code>public_html</code> if it does not
+          exist, and move <code>uploads-htaccess.txt</code> into it as <code>.htaccess</code>.</p>
+        <p>This is the one that matters most on shared hosting: it means whatever lands in that
+          directory is served but never executed.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="php">
+    <h2>5. PHP version</h2>
+    <p>cPanel → <em>Select PHP Version</em> (sometimes <em>MultiPHP Manager</em>) → choose
+      <strong>8.1</strong> or newer for this domain. In the extensions list, make sure
+      <code>curl</code> is ticked: sign-in uses it to check the token with Google.</p>
+    <p>If <em>Select PHP Version</em> offers <code>disable_functions</code>, leave
+      <code>shell_exec</code> enabled if you want git commits. Handpress works without it and simply
+      skips the commit.</p>
+  </section>
+
+  <section id="signin">
+    <h2>6. Google sign-in</h2>
+    <ol class="steps">
+      <li>
+        <h3>Create the OAuth client</h3>
+        <p>In the Google Cloud console: <em>APIs &amp; Services → Credentials → Create credentials →
+          OAuth client ID → Web application</em>.</p>
+      </li>
+      <li>
+        <h3>List your site as an origin</h3>
+        <p>Under <em>Authorized JavaScript origins</em>, add <code>https://yourdomain.com</code>
+          (and the staging subdomain, if you have one). No redirect URIs are needed.</p>
+      </li>
+      <li>
+        <h3>Put the client ID in the settings file</h3>
+        <p>Copy it into <code>google_client_id</code>, and put the owner's Google address in
+          <code>admin_emails</code>. That address is the whole of the access control: anyone on the
+          list may edit, everyone else is refused.</p>
+      </li>
+    </ol>
+    <p>Make sure HTTPS is on first — cPanel → <em>SSL/TLS Status</em> → <em>Run AutoSSL</em>. The
+      session cookie is marked Secure, so sign-in will not stick over plain HTTP.</p>
+  </section>
+
+  <section id="check">
+    <h2>7. Check it</h2>
+    <p>Visit <code>https://yourdomain.com/admin</code> and sign in. The site should reappear with
+      an editor bar along the bottom. Then run through this list — it takes two minutes and catches
+      the things that matter:</p>
+    <table>
+      <tr><td>Edit text on two pages and save</td><td>The change is live immediately. If git is on, a commit appears in your repository.</td></tr>
+      <tr><td>Edit the footer and open another page</td><td>The change is on every page.</td></tr>
+      <tr><td>Duplicate a card or list item, then delete it</td><td>Both survive a save.</td></tr>
+      <tr><td>Replace an image</td><td>The new file appears in <code>uploads/</code> and is served.</td></tr>
+      <tr><td>Open <code>yourdomain.com/uploads/</code></td><td>Should not list the directory.</td></tr>
+      <tr><td>Open <code>yourdomain.com/.git/config</code> and <code>/handpress-config.php</code></td><td>Both must return 404. If either downloads, stop and fix the <code>.htaccess</code>.</td></tr>
+      <tr><td>Open the site in a private window</td><td><code>editor.js</code> must not load, and <code>/api/me</code> must return 401.</td></tr>
+    </table>
+  </section>
+
+  <section id="nossh">
+    <h2>Without SSH</h2>
+    <p>Plenty of cheap cPanel plans have no Terminal and no git. Handpress still runs; you lose the
+      commit history, not the editing.</p>
+    <p>Set <code>'git' =&gt; false</code> in the settings file. Every save then keeps a timestamped
+      copy of each file it is about to overwrite, in <code>handpress-backups/</code> above the web
+      root, and the last hundred saves are kept.</p>
+    <p>To restore something, open File Manager, find the dated folder, and copy the file back into
+      <code>public_html</code>. It is cruder than <code>git revert</code>, but it has saved the same
+      afternoon of work.</p>
+    <div class="note">
+      <p>If your plan has git but no shell, cPanel's <em>Git Version Control</em> can still pull
+        deployments from your repository — but it cannot push the client's edits back. Treat the
+        server as the source of truth in that case, and pull <em>from</em> it when you next work
+        locally, or you will overwrite their changes.</p>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <h2>Troubleshooting</h2>
+    <table>
+      <thead><tr><th>What you see</th><th>What it usually is</th></tr></thead>
+      <tbody>
+        <tr><td>Sign-in page loads, but the Google button never appears</td><td><code>google_client_id</code> is empty, or your origin is not listed in the OAuth client. Both are exact-match: <code>https://www.example.com</code> and <code>https://example.com</code> are different origins.</td></tr>
+        <tr><td>"Google sign-in could not be verified"</td><td>The client ID in the settings file does not match the one the page used, or <code>curl</code> is disabled for this PHP version.</td></tr>
+        <tr><td>You sign in, then immediately get "Please sign in again"</td><td>The session is not persisting: the site is not on HTTPS, or the home directory is not writable for <code>handpress-sessions</code>.</td></tr>
+        <tr><td>404 on <code>/api/config</code></td><td><code>.htaccess</code> is missing (hidden files are off in File Manager), or <code>mod_rewrite</code> is off. Test with <code>/api.php?route=config</code> — if that works, it is the rewrite.</td></tr>
+        <tr><td>"This page can't be edited"</td><td>The page is not in <code>pages</code>, or it has no keys because <code>handpress keys</code> was not run, or the file you uploaded is not the keyed one.</td></tr>
+        <tr><td>"Could not write … Check the folder's permissions"</td><td>Files should be 644 and directories 755, owned by your cPanel user. If you uploaded as a different user, fix ownership in File Manager.</td></tr>
+        <tr><td>Save works, but nothing is committed</td><td>Expected without shell access. With it: check <code>.git</code> exists in <code>public_html</code>, and that the deploy key has <em>write</em> access.</td></tr>
+        <tr><td>The editor sits on "Publishing…"</td><td>Something is serving a cached copy — often a CDN or a cPanel cache in front of the site. The editor waits for the page it just wrote.</td></tr>
+        <tr><td>Clean URLs broke an existing app</td><td>Delete the clean-URL block from <code>.htaccess</code>; only the <code>/api/</code> rule is required.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="page">
+    <p><a href="./">Back to the documentation</a> ·
+      <a href="https://github.com/bikramtuladhar/handpress">GitHub</a> ·
+      <a href="https://handpress-demo.bikramtuladhar2011.workers.dev">Demo</a></p>
+  </footer>
+</main>
+</div>
+</body>
+</html>

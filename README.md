@@ -9,6 +9,7 @@ No CMS, no build step, no database. Every save is a git commit.
 [![agent skill](https://img.shields.io/badge/agent%20skill-handpress-1f883d.svg)](https://www.skills.sh/bikramtuladhar/handpress)
 
 ### ➜ [Try the demo](https://handpress-demo.bikramtuladhar2011.workers.dev) — no sign-up; it's a real page and you really edit it
+### 📖 [Documentation](https://bikramtuladhar.github.io/handpress/)
 
 ![Editing text in place](docs/images/editing.png)
 
@@ -93,8 +94,15 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
 Create a Google OAuth client (Web application), list your site's origin under *Authorized
 JavaScript origins*, deploy, and visit `/admin`.
 
-Not on Cloudflare? [`docs/other-hosts.md`](docs/other-hosts.md) covers ordinary shared hosting
-(Apache and PHP), where saves publish **instantly** because the files are right there.
+Not on Cloudflare? The PHP half ships with it, and saves publish **instantly** because the files
+are right there:
+
+```sh
+npx handpress install ./public_html --php     # api.php + Apache templates + sample settings
+```
+
+[Step-by-step guide for cPanel hosting](https://bikramtuladhar.github.io/handpress/cpanel.html) ·
+[notes for other hosts](docs/other-hosts.md)
 
 ## How it works
 
