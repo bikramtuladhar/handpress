@@ -30,4 +30,11 @@ RedirectMatch 404 (?i)^/(package(-lock)?\.json|.*\.md|handpress-config\.php)$
   # A staging copy should stay out of search results:
   # SetEnvIf Host ^staging\. IS_STAGING
   # Header set X-Robots-Tag "noindex, nofollow" env=IS_STAGING
+  # Many hosts tell browsers to keep every file for weeks, so a saved edit to a page or a data
+  # file stays invisible until a hard refresh. Pages, scripts and styles revalidate on every
+  # visit instead (a cheap 304 when unchanged); images keep the host's long cache.
+  <FilesMatch "\.(html|js|css)$">
+    Header set Cache-Control "no-cache"
+    Header unset Expires
+  </FilesMatch>
 </IfModule>

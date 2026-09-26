@@ -1,6 +1,6 @@
 {
   "name": "handpress",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Edit your hand-written static site in place, in the browser. Saves are git commits.",
   "type": "module",
   "license": "MIT",
