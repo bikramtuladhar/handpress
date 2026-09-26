@@ -26,7 +26,6 @@
     <p id="msg" role="status"></p>
     <p><a href="/">Back to the site</a></p>
   </main>
-  <script src="https://accounts.google.com/gsi/client" async onload="start()"></script>
   <script>
     var msg = document.getElementById('msg');
     function say(t) { msg.textContent = t; }
@@ -46,5 +45,7 @@
       location.href = /^\/(?!\/)/.test(next) ? next : '/'; // same-site paths only
     }
   </script>
+  <!-- After the script above: from cache this can load at once, and its onload needs start(). -->
+  <script src="https://accounts.google.com/gsi/client" async onload="start()"></script>
 </body>
 </html>
