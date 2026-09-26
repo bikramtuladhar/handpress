@@ -6,6 +6,7 @@ No CMS, no build step, no database. Every save is a git commit.
 [![test](https://github.com/bikramtuladhar/handpress/actions/workflows/test.yml/badge.svg)](https://github.com/bikramtuladhar/handpress/actions/workflows/test.yml)
 [![npm](https://img.shields.io/npm/v/handpress.svg)](https://www.npmjs.com/package/handpress)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![skills](https://skills.sh/b/bikramtuladhar/handpress)](https://skills.sh/bikramtuladhar/handpress)
 
 ### ➜ [Try the demo](https://handpress-demo.bikramtuladhar2011.workers.dev) — no sign-up; it's a real page and you really edit it
 
@@ -142,10 +143,16 @@ of `test/browser.mjs`.
 
 ## Using it with an AI assistant
 
-[`skills/claude-code/SKILL.md`](skills/claude-code/SKILL.md) is a skill for Claude Code and
-other coding agents: when Handpress fits, how to install it, the failure modes, and what to
-verify before handing a site to its owner. Copy it to `.claude/skills/handpress/SKILL.md` in
-your project, or point your agent at it.
+Handpress ships an agent skill — when it fits, how to install it, the failure modes, and what
+to verify before handing a site to its owner:
+
+```sh
+npx skills add bikramtuladhar/handpress          # Claude Code, Cursor, Codex, OpenCode, and ~75 more
+npx skills use bikramtuladhar/handpress@handpress | claude    # or use it without installing
+```
+
+Or copy [`skills/handpress/SKILL.md`](skills/handpress/SKILL.md) to `.claude/skills/handpress/SKILL.md`
+yourself — it is a plain Markdown file with front matter.
 
 ## Status and limits
 
