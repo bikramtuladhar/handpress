@@ -5,7 +5,7 @@
 > No templating, no database, no build step.
 
 Use it for: small hand-built sites (tens of pages), one or two editors, a design that matters.
-Do not use it for: hundreds of pages, many simultaneous authors, drafts or approval workflow,
+Do not use it for: hundreds of pages, many simultaneous authors, server-side drafts or approval workflow,
 content already in a database or a framework's content collection.
 
 ## Install
@@ -52,8 +52,21 @@ The editor keeps two DOMs: the live page, and the page's source fetched from the
 apply to both, and only the source is saved, so a site's own JavaScript (rendered lists,
 animated counters) never gets written into the files. Keys are how the two are matched.
 
-Per-site quirks go in window.EDITOR_HOOKS: beforeEdit(el) to detach an element the site
-animates, syncUnit(sourceEl, liveEl) to keep an attribute in step with edited text.
+Every change is an operation kept in the browser (localStorage; new uploads in IndexedDB) until
+Save, so drafts survive Preview, other pages and reloads; Undo/Redo drop and restore the last one.
+Save replays each edited page's operations onto the current file and commits all in one commit.
+
+Editors can: type text; bold/italic/links/colour/size/font; duplicate, move, remove, copy and paste
+blocks and whole sections (<main> is keyed as a list), including across pages; replace images;
+change YouTube embeds (iframe .../embed/ID or [data-yt-id]) and audio (<audio>, [data-audio]);
+edit <select> options; edit page meta; edit the data file as a form.
+
+Per-site quirks and extras go in window.EDITOR_HOOKS: beforeEdit(el) to detach an element the site
+animates; syncUnit(sourceEl, liveEl) to keep an attribute in step with edited text (liveEl may be
+null); dataRegions [[selector, file, path, label]] for on-page handles on lists drawn from data;
+dataChanged(path, obj) to redraw from unsaved data; blocks [[label, html]] for "+ New"; fonts
+[[label, css]] for Style; guide {page: [[tip, selector]]} for the per-page Guide.
+Uploads (uploadDir): jpg png webp gif svg mp3 m4a ogg.
 
 ## Links
 

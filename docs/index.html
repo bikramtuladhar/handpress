@@ -22,6 +22,7 @@
   <ol>
     <li><a href="#what">What it is</a></li>
     <li><a href="#demo">Demo</a></li>
+    <li><a href="#features">What the editor does</a></li>
     <li><a href="#install">Install</a></li>
     <li><a href="#options">Options</a></li>
     <li><a href="#cli">Command line</a></li>
@@ -73,10 +74,26 @@
 
     <table>
       <tr><th>No templating</th><td>Your markup is untouched apart from a small <code>data-e</code> key on each editable element.</td></tr>
-      <tr><th>No database</th><td>Files in git. Undo is <code>git revert</code>. Your backups are your repository.</td></tr>
+      <tr><th>No database</th><td>Files in git. Before Save the editor has its own Undo; after it, <code>git revert</code>. Your backups are your repository.</td></tr>
       <tr><th>No build</th><td>One JavaScript file, loaded only for signed-in editors. Visitors download nothing.</td></tr>
       <tr><th>Clean diffs</th><td>A changed sentence is a one-line diff you can review in a pull request.</td></tr>
       <tr><th>Design holds</th><td>New entries are copies of existing ones, so nobody invents a layout by accident.</td></tr>
+    </table>
+  </section>
+
+  <section id="features">
+    <h2>What the editor does</h2>
+    <table>
+      <tr><th>Text</th><td>Click and type. Bold, italic, links (address, text, new tab), and colour, size and font for selected words or a whole block. Pasted text arrives plain; Enter never makes stray paragraphs.</td></tr>
+      <tr><th>Blocks</th><td>Hover a card, list entry, button or whole section for its menu: duplicate, move, remove, copy, style, edit or follow its link. <strong>+</strong> adds after it: a new paragraph, heading or button (your own, via <code>blocks</code>), a copy, or anything copied or removed, from any page. <strong>⤴</strong> picks the block around the current one.</td></tr>
+      <tr><th>Drafts</th><td>Nothing is public until Save. Unsaved edits are kept in the browser through Preview, going to other pages and reloads, with a counter on the Save button. Undo and Redo cover page and data edits. One Save commits every edited page together.</td></tr>
+      <tr><th>Images</th><td>Click to replace (resized in the browser first) and edit the description. Copies of the same picture in a section change together.</td></tr>
+      <tr><th>Video and audio</th><td>YouTube embeds get “Change video” (paste a link); audio players get “Change audio” (upload, replace or remove an mp3, m4a or ogg).</td></tr>
+      <tr><th>Drop-downs</th><td>Click a <code>&lt;select&gt;</code> to edit its choices: the label visitors see and the value the form sends.</td></tr>
+      <tr><th>Shared blocks</th><td>Edit the header or footer once; it is written to every page.</td></tr>
+      <tr><th>Page settings</th><td>Title, meta description, the text shown when the page is shared, and every image on the page.</td></tr>
+      <tr><th>Site data</th><td>A form over your JSON data file. Lists your script draws from it get handles on the page (move, duplicate, edit, remove, “+ Add”, “+ Add images”) and redraw as they change (<code>dataRegions</code>, <code>dataChanged</code>).</td></tr>
+      <tr><th>Guide</th><td>Tips for each page with a “Show me” button (<code>guide</code>). It opens by itself the first time a page is edited.</td></tr>
     </table>
   </section>
 
@@ -181,7 +198,7 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
         <tr><td><code>pages</code></td><td>string[]</td><td>The pages that can be edited, as repository paths. Required.</td></tr>
         <tr><td><code>dataFiles</code></td><td>object</td><td>Path to label, for each data file. A data file is <code>window.NAME&nbsp;=&nbsp;{ …&nbsp;valid JSON&nbsp;… };</code> — the label is what the editor shows in its Site data panel.</td></tr>
         <tr><td><code>globalBlocks</code></td><td>string[]</td><td>Selectors for blocks repeated on every page (<code>header</code>, <code>footer</code>, <code>#menu</code>). Edited once, written to every page, with the current page's nav link marked.</td></tr>
-        <tr><td><code>uploadDir</code></td><td>string</td><td>Where new images are committed. Only <code>jpg</code>, <code>png</code>, <code>webp</code>, <code>gif</code> and <code>svg</code>, and only in this directory.</td></tr>
+        <tr><td><code>uploadDir</code></td><td>string</td><td>Where new images and audio are committed. Only <code>jpg</code>, <code>png</code>, <code>webp</code>, <code>gif</code>, <code>svg</code>, <code>mp3</code>, <code>m4a</code> and <code>ogg</code>, and only in this directory.</td></tr>
         <tr><td><code>forceVisible</code></td><td>string</td><td>A CSS selector kept visible while editing. Set it if you animate elements into view, or the editor's owner cannot click what has not appeared yet.</td></tr>
       </tbody>
     </table>
@@ -230,6 +247,16 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
       what gets written is clean HTML. The live page is a preview; the source is the truth.</p>
     <p>That is also why keys exist. They are how an element in the live page is matched with the
       same element in the file, even after your scripts have moved things around.</p>
+
+    <h3>Drafts, undo and one save</h3>
+    <p>Every change is a small operation (set this text, insert this copy after that key, move,
+      remove, change a link…), applied to both copies and kept in the browser's storage until
+      Save. That is why unsaved edits survive Preview, a trip to another page and a reload: on
+      load the editor replays them. Undo drops the last operation and replays the rest; Redo puts
+      it back. New images and audio wait in IndexedDB.</p>
+    <p>Save replays each edited page's operations onto the file as it is on the server now, and
+      commits all of them, with the data file and the uploads, in one commit. If a page changed
+      underneath so that an edit no longer fits, the save is refused and your edits stay put.</p>
   </section>
 
   <section id="hooks">
@@ -349,7 +376,7 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
     <h2>Limits</h2>
     <p>Deliberately missing, so you can judge it honestly:</p>
     <table>
-      <tr><th>No drafts</th><td>Saving publishes. The git history is the undo. If you need staging, point the server at a branch and merge when you approve.</td></tr>
+      <tr><th>Drafts live in one browser</th><td>Unsaved edits are kept in the browser that made them, not on the server, and Save publishes. If you need a review step, point the server at a branch and merge when you approve.</td></tr>
       <tr><th>No workflow</th><td>No review or approval step, and no roles beyond "may edit".</td></tr>
       <tr><th>One editor at a time</th><td>A second concurrent save is refused, not merged.</td></tr>
       <tr><th>No content types</th><td>Pages are pages. Structured lists live in a data file.</td></tr>

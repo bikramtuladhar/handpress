@@ -31,7 +31,7 @@ or swap a photograph twice a year.
 Handpress keeps the HTML as the source of truth and teaches the browser to edit it.
 
 - **No templating.** Your markup is untouched except for a small `data-e` key per editable element.
-- **No database.** Files in git. Undo is `git revert`. Backups are your repository.
+- **No database.** Files in git. Before Save the editor has its own Undo; after it, `git revert`. Backups are your repository.
 - **No build.** One JavaScript file, loaded only for signed-in editors. Visitors download nothing.
 - **Clean diffs.** A changed sentence is a one-line diff you can review in a pull request.
 - **The design can't drift.** New entries are copies of existing ones, so a client cannot invent a layout.
@@ -121,6 +121,11 @@ lists rendered, counters animated, classes toggled. Saving what is on screen wou
 that into the file. So the editor edits the *source* by key and writes that; the live page is
 only a preview.
 
+Every change is a small operation kept in the browser until Save, so unsaved edits survive
+Preview, other pages and reloads (they are replayed on load), and Undo / Redo are just dropping
+and restoring the last one. Save replays each edited page's operations onto the current file and
+commits everything in one go.
+
 ## Security
 
 The trust boundary is the admin list: anyone on it can change any editable file, and editing
@@ -152,9 +157,10 @@ npm run example     # the sample bakery site on wrangler dev
 npm run demo:build  # regenerate demo/ from the example
 ```
 
-`npm run test:browser` drives the example in a real browser — edit text, edit a shared block,
-duplicate a card, edit the data file, save — against a stand-in GitHub, then checks what was
-committed. It needs `playwright-core`, a local Chrome, and the two processes named at the top
+`npm run test:browser` drives the example in a real browser — the guide, list handles on the
+data-drawn markets with a live redraw, copying a section, text and shared-block edits, duplicate,
+undo / redo, a reload mid-draft, the data file, save — against a stand-in GitHub, then checks
+what was committed. It needs `playwright-core`, a local Chrome, and the two processes named at the top
 of `test/browser.mjs`.
 
 ## Using it with an AI assistant

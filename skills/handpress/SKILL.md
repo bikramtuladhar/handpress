@@ -18,8 +18,9 @@ wants to fix a date or swap a photograph occasionally.
 
 Say so plainly and stop if instead the site has: hundreds of pages, many simultaneous authors,
 a draft/approval workflow, or content already in a database or a framework's content
-collection. Those want a real CMS. Handpress has no drafts and refuses a second concurrent
-save rather than merging it.
+collection. Those want a real CMS. Handpress keeps unsaved drafts only in the editor's own
+browser (no server-side drafts or approval), and refuses a second concurrent save rather than
+merging it.
 
 ## Steps
 
@@ -94,6 +95,20 @@ Anything the site renders from a list — events, products, opening times — be
 file (`window.NAME = { …valid JSON… };`), not in the markup. The editor gives the owner a form
 for it. Content kept in markup can only be edited where it appears.
 
+Then, in the site's script, tell the editor where that list is drawn and how to redraw it, so the
+owner gets handles right on the page and sees changes before saving:
+
+```js
+window.EDITOR_HOOKS = {
+  dataRegions: [['[data-events]', 'data.js', 'events', 'Events']],   // one child element per entry
+  dataChanged: function (path, obj) { if (path === 'data.js') { window.SITE = obj; renderEvents(); } },
+  guide: { 'index.html': [['Events come from data.js: “+ Add”, or the handles on each.', '[data-events]']] }
+};
+```
+
+`guide` gives each page tips with a “Show me” button; write one or two per page for whatever the
+owner is likely to change.
+
 ## Things that go wrong
 
 - **Text reverts after saving.** The site's own JavaScript rewrites that element (a counter, a
@@ -110,7 +125,9 @@ for it. Content kept in markup can only be edited where it appears.
 
 1. Sign in as an admin, edit text on two pages, save, and confirm the commit.
 2. Edit a shared header or footer and confirm every page changed.
-3. Duplicate a list item, reorder, delete, save.
-4. Replace an image, and confirm the uploaded file is served and cannot be executed.
+3. Duplicate a list item, reorder, delete, Undo, Redo, save. Copy a whole section to another page.
+   Reload before saving once, and check the draft (the counter on Save) survived.
+4. Replace an image (and audio, if the site has any), and confirm the uploaded file is served and
+   cannot be executed.
 5. Visit as a signed-out visitor: `editor.js` must not load, and `/api/save` must return 401.
 6. Confirm nothing outside the allowlist can be read or written, even while signed in.

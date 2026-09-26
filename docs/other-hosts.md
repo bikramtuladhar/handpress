@@ -70,7 +70,7 @@ And in the uploads directory, refuse to execute whatever lands there:
 </IfModule>
 RemoveHandler .php .phtml .cgi .pl .py
 RemoveType .php .phtml .cgi .pl .py
-<FilesMatch "^(?!.*\.(?i:jpe?g|png|webp|gif|svg)$).*$">
+<FilesMatch "^(?!.*\.(?i:jpe?g|png|webp|gif|svg|mp3|m4a|ogg)$).*$">
   Require all denied
 </FilesMatch>
 ```
