@@ -6,7 +6,7 @@
   "license": "MIT",
   "files": [
     "src",
-    "scripts",
+    "scripts/cli.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -19,10 +19,11 @@
     "demo:deploy": "node scripts/build-demo.mjs && wrangler deploy --config demo/wrangler.jsonc"
   },
   "devDependencies": {
-    "parse5": "^8.0.0",
     "wrangler": "^4.0.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "parse5": "^8.0.0"
+  },
   "bin": {
     "handpress": "scripts/cli.mjs"
   },
