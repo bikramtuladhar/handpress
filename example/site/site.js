@@ -24,6 +24,11 @@
         ['Products: hover a card to duplicate, move or remove it. Click a picture to replace it.', '.cards'],
         ['Markets come from data.js: “+ Add”, or the handles on each market.', '[data-markets]']
       ]
+    },
+    // The AI assistant: voice notes the AI writes with, and extra per-block quick actions.
+    ai: {
+      context: 'Wildflower Bakery: a small sourdough bakery. Warm, plain, a little literary — short sentences, concrete details (flour, time, weather), never hype or exclamation marks.',
+      actions: [['Market line', 'Rewrite as a one-line market announcement: day, place, hours, and one warm detail.']]
     }
   };
 

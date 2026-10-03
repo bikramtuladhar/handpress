@@ -43,7 +43,10 @@
   // time each page is edited.
   var GUIDE = HOOKS.guide || {};
   var PAGE = pageFile(location.pathname);
-  var DRAFT_KEY = 'ed-draft', CLIP_KEY = 'ed-clip';
+  var DRAFT_KEY = 'ed-draft', CLIP_KEY = 'ed-clip', AI_KEY = 'ed-ai';
+  // The AI assistant (OpenRouter, browser-direct). Per-site extras in window.EDITOR_HOOKS.ai:
+  // { context: brand-voice notes, model: default model id, actions: [[label, instruction], …] }.
+  var AI_HOOKS = HOOKS.ai || {};
 
   var src = null, srcSha = null;              // this page's source DOM + the sha it came from
   var maxKey = { '': 0, g: 0 };
@@ -315,7 +318,8 @@
       h('span', { className: 'ed-group' }, [
         tool('Page', 'Page title, description and all images on this page', openPagePanel),
         tool('Site data', 'Lists and settings the site renders from its data file', openDataPanel),
-        tool('Guide', 'What you can change on this page, and how', openGuide)
+        tool('Guide', 'What you can change on this page, and how', openGuide),
+        tool('AI', 'Write or improve content with AI (OpenRouter)', openAiDrawer)
       ]),
       status,
       h('span', { className: 'ed-group ed-end' }, [
@@ -692,6 +696,7 @@
       tool('↓', 'Move down', function () { move(current, 1); }),
       linkBtns[0], linkBtns[1],
       tool('🎨', 'Colour, size and font of this block', function () { openStyle(current); }),
+      tool('AI', 'Rewrite this text with AI, or add an AI-written block after it', function () { openAiFor(current); }),
       tool('✕', 'Remove this (Undo, or + → paste, brings it back)', function () { del(current); })
     ]);
     document.body.append(itemBar);
@@ -1355,6 +1360,325 @@
     guideOnce();
   }
 
+  /* ------------------------------------------------------------------- ai */
+  // Free AI through OpenRouter, called straight from the browser. The key lives in
+  // localStorage (ed-ai) and is sent only to openrouter.ai. Every result goes through
+  // aiSanitize and is committed as an ordinary op, so AI edits undo, draft and save
+  // like any typed change.
+  var aiCtx = null, aiModels = null;           // design-context bundle and free-model list, built once
+
+  function aiSettings() {
+    try { var s = JSON.parse(localStorage.getItem(AI_KEY)); if (s && typeof s === 'object') return s; } catch (e) { /* none or unreadable */ }
+    return { key: '', model: AI_HOOKS.model || 'openrouter/free' };
+  }
+  function writeAiSettings(s) {
+    try { localStorage.setItem(AI_KEY, JSON.stringify(s)); } catch (e) { /* private mode: settings last for this session only */ }
+  }
+
+  async function aiAsk(system, user, opts) {
+    opts = opts || {};
+    var s = aiSettings();
+    if (!s.key) throw new Error('No OpenRouter API key yet. Paste one under AI → Settings (free key from openrouter.ai/keys).');
+    var body = {
+      model: s.model || 'openrouter/free',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: opts.maxTokens || 900,
+      temperature: opts.temperature == null ? 0.7 : opts.temperature
+    };
+    if (opts.json) body.response_format = { type: 'json_object' };
+    var r;
+    try {
+      r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + s.key,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': location.origin,
+          'X-Title': 'Handpress'
+        },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      throw new Error('Could not reach OpenRouter (network or blocked). Check the connection and try again.');
+    }
+    var d = await r.json().catch(function () { return {}; });
+    if (!r.ok) {
+      var m = (d.error && d.error.message) || 'Error ' + r.status;
+      if (r.status === 401) throw new Error('OpenRouter rejected the API key. Copy it again from openrouter.ai/keys.');
+      if (r.status === 402) throw new Error('This model needs credits. Pick a free model (ending in :free, or openrouter/free) under AI → Settings.');
+      if (r.status === 429) throw new Error('Rate limited on “' + (s.model || 'openrouter/free') + '”. Free models allow few requests: wait a moment, or pick another free model.');
+      throw new Error('OpenRouter: ' + m);
+    }
+    var content = d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+    if (!content) throw new Error('The model returned nothing. Try again, or pick another free model.');
+    if (opts.json) {
+      var jm = /\{[\s\S]*\}/.exec(String(content));
+      if (!jm) throw new Error('Expected JSON from the model. Try again, or pick another free model.');
+      try { return JSON.parse(jm[0]); } catch (e) { throw new Error('The model’s JSON was not valid. Try again.'); }
+    }
+    return String(content);
+  }
+
+  // Free models from OpenRouter's catalogue (no auth needed for the list itself).
+  async function aiFreeModels() {
+    if (aiModels) return aiModels;
+    var r = await fetch('https://openrouter.ai/api/v1/models');
+    var d = await r.json();
+    var list = (d.data || []).filter(function (m) {
+      return m.pricing && (+m.pricing.prompt === 0 || /:free$/.test(m.id));
+    }).filter(function (m) { return !/rerank|embedding|whisper|tts|moderation/i.test(m.id); })
+      .sort(function (a, b) { return (/:free$/.test(b.id) ? 1 : 0) - (/:free$/.test(a.id) ? 1 : 0) || String(a.name).localeCompare(b.name); })
+      .slice(0, 30)
+      .map(function (m) { return [m.id, m.name]; });
+    return (aiModels = [['openrouter/free', 'Auto — routes to a free model']].concat(list));
+  }
+
+  // The site's design as the AI sees it: tokens, class vocabulary, section shapes, voice.
+  // Built once per page load; capped so free-model context stays cheap.
+  function buildDesignContext() {
+    if (aiCtx) return aiCtx;
+    var cssAll = '';
+    Array.prototype.forEach.call(document.styleSheets, function (ss) {
+      if (ss.href && ss.href.indexOf(location.origin) !== 0) return;   // same-origin only
+      var owner = ss.ownerNode;
+      if (owner && owner.closest && owner.closest('[data-ed-ui]')) return;   // skip the editor's own chrome CSS
+      try { Array.prototype.forEach.call(ss.cssRules || [], function (r) { cssAll += r.cssText + '\n'; }); }
+      catch (e) { /* unreadable sheet */ }
+    });
+    var tokens = [], root = /:root\s*\{([^}]*)\}/.exec(cssAll);
+    if (root) tokens = (root[1].match(/--[a-zA-Z0-9-]+\s*:\s*[^;}]+/g) || []).slice(0, 24);
+    var bodyFont = (cssAll.match(/\bbody\s*\{[^}]*\}/) || [''])[0].replace(/\s+/g, ' ').slice(0, 220);
+    var used = {};
+    $$('[class]').forEach(function (n) {
+      String(n.getAttribute('class') || '').split(/\s+/).forEach(function (c) { if (c) used[c] = 1; });
+    });
+    var classRules = [];
+    cssAll.split('\n').forEach(function (line) {
+      if (classRules.length >= 40 || !line) return;
+      var m = line.match(/\.[a-zA-Z][\w-]*/g);
+      if (m && m.some(function (c) { return used[c.slice(1)]; })) classRules.push(line.trim().slice(0, 300));
+    });
+    var patterns = [];
+    if (src) $$('[data-e-list]', src).forEach(function (list) {
+      if (patterns.length >= 4) return;
+      var first = list.firstElementChild;
+      if (first) patterns.push(first.outerHTML.replace(/\sdata-e(?:-list)?="[^"]*"/g, '').slice(0, 500));
+    });
+    var voice = '';
+    try {
+      var clone = document.body.cloneNode(true);
+      $$('[data-ed-ui], script, style, dialog', clone).forEach(function (n) { n.remove(); });
+      voice = (clone.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
+    } catch (e) { /* nothing to learn from */ }
+    aiCtx = [
+      'SITE DESIGN CONTEXT — write content that fits this site exactly.',
+      'Design tokens (CSS custom properties):\n' + (tokens.join('\n') || '(none found)'),
+      'Body typography:\n' + (bodyFont || '(default)'),
+      'CSS classes used on this page — reuse these, never invent new ones:\n' + (classRules.join('\n') || '(none found)'),
+      'Section patterns already on the page (copy their class usage and hierarchy):\n' + (patterns.join('\n---\n') || '(none found)'),
+      BLOCKS.length ? 'Block templates the site offers for new content:\n' + BLOCKS.map(function (b) { return b[0] + ': ' + b[1]; }).join('\n') : '',
+      FONTS.length ? 'Fonts offered in the Style menu: ' + FONTS.map(function (f) { return f[0]; }).join(', ') : '',
+      GUIDE[PAGE] && GUIDE[PAGE].length ? 'What belongs on this page: ' + GUIDE[PAGE].map(function (t) { return t[0]; }).join(' ') : '',
+      AI_HOOKS.context ? 'Brand voice notes from the site author: ' + AI_HOOKS.context : '',
+      'Current page copy (match this voice and length):\n' + (voice || '(none)'),
+      'RULES\n' + [
+        '- Match the voice, tone and length of the existing copy.',
+        '- Reuse only the classes listed above; keep the same heading/paragraph hierarchy.',
+        '- For new content: mark each editable text element data-e="t0" (list items data-e="i0"); the editor assigns final keys.',
+        '- No <script>, <style>, <iframe>, inline event handlers, or javascript: links.',
+        '- Return only what was asked: no preamble, no explanations, no markdown fences.'
+      ].join('\n')
+    ].filter(Boolean).join('\n\n').slice(0, 8000);
+    return aiCtx;
+  }
+
+  // Model output before it touches the page: dangerous tags/attributes out. Section output
+  // keeps its data-e keys — insertAfter's rekey() numbers them fresh; without keys the inserted
+  // block would not be editable, so a fallback keys text leaves when the model forgot them.
+  var AI_DROP = /^(script|style|iframe|object|embed|form|input|button|textarea|select|meta|link|base|noscript)$/i;
+  var AI_INLINE = /^(A|EM|STRONG|B|I|BR|SPAN|CODE|SMALL|SUP|SUB|MARK)$/;
+  function aiKeyFallback(root) {
+    if (root.querySelector('[data-e]')) return;
+    var keyed = [];
+    [root].concat($$('*', root)).forEach(function (n) {
+      if (/^(SCRIPT|STYLE)$/i.test(n.tagName) || !n.textContent.trim()) return;
+      if (keyed.some(function (p) { return p.contains(n); })) return;                         // inside something already keyed
+      var kids = Array.prototype.slice.call(n.children);
+      if (kids.length && !kids.every(function (c) { return AI_INLINE.test(c.tagName); })) return;   // a container: key its children
+      n.setAttribute('data-e', 't0');
+      keyed.push(n);
+    });
+    if (!root.querySelector('[data-e]')) root.setAttribute('data-e', 't0');                   // e.g. an image-only block
+  }
+  function aiSanitize(html, mode) {
+    var wrap = src.createElement('div');
+    wrap.innerHTML = String(html == null ? '' : html);
+    $$('*', wrap).forEach(function (n) {
+      if (AI_DROP.test(n.tagName)) { n.remove(); return; }
+      Array.prototype.slice.call(n.attributes).forEach(function (a) {
+        if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+        else if ((a.name === 'href' || a.name === 'src' || a.name === 'action') && !safeUrl(a.value)) n.removeAttribute(a.name);
+      });
+      if (mode === 'section') n.removeAttribute('data-ed-ui');
+    });
+    if (mode === 'text') {
+      var kids = Array.prototype.slice.call(wrap.children);
+      if (kids.length === 1 && /^(P|DIV|H1|H2|H3|H4|H5|H6|SECTION|ARTICLE|BLOCKQUOTE|LI|UL|OL)$/.test(kids[0].tagName)) return kids[0].innerHTML;
+      return wrap.innerHTML;
+    }
+    aiKeyFallback(wrap);
+    return wrap.innerHTML.trim();
+  }
+
+  // Where the AI drawer inserts new blocks: after the last editable (non-global) block.
+  function aiAnchor() {
+    if (!src) return null;
+    var all = $$('[data-e]', src.body).filter(function (n) { return !/^g/.test(keyOf(n) || ''); });
+    return all[all.length - 1] || null;
+  }
+
+  function openAiDrawer() {
+    var s = aiSettings();
+    var keyIn = h('input', { type: 'password', value: s.key || '', placeholder: 'sk-or-v1-… (free key from openrouter.ai/keys)', autocomplete: 'off', spellcheck: false });
+    var modelSel = h('select', { className: 'ed-select' });
+    var modelCustom = h('input', { placeholder: '…or type any model id, e.g. qwen/qwen3.8-27b:free' });
+    var note = h('p', { className: 'ed-note' });
+    var promptIn = h('textarea', { rows: 4, placeholder: 'What should the AI write? e.g. “a short intro paragraph about our sourdough workshop, warm and factual”' });
+    var resultBox = h('div', { className: 'ed-ai-preview' });
+    var resultHtml = null;
+    function currentModel() { return modelCustom.value.trim() || modelSel.value || 'openrouter/free'; }
+    function save() { s.key = keyIn.value.trim(); s.model = currentModel(); writeAiSettings(s); }
+    keyIn.addEventListener('change', save);
+    modelSel.addEventListener('change', function () { modelCustom.value = ''; save(); });
+    modelCustom.addEventListener('change', function () {
+      if (!modelCustom.value.trim()) return;
+      var v = modelCustom.value.trim();
+      if (!modelSel.querySelector('option[value="' + v.replace(/"/g, '\\"') + '"]')) modelSel.append(h('option', { value: v, textContent: v }));
+      modelSel.value = v;
+      save();
+    });
+    var fallback = h('option', { value: s.model || 'openrouter/free', textContent: s.model || 'openrouter/free' });
+    modelSel.append(fallback);
+    aiFreeModels().then(function (list) {
+      modelSel.textContent = '';
+      var has = false;
+      list.forEach(function (m) {
+        var on = m[0] === (s.model || 'openrouter/free');
+        if (on) has = true;
+        modelSel.append(h('option', { value: m[0], textContent: m[1] + ' — ' + m[0], selected: on }));
+      });
+      if (!has) modelSel.append(h('option', { value: s.model || 'openrouter/free', textContent: s.model || 'openrouter/free', selected: true }));
+    }).catch(function () {
+      note.textContent = 'Could not load the free-model list (offline?). The typed model id below still works.';
+    });
+    function generate() {
+      save();
+      var inst = promptIn.value.trim();
+      if (!inst) { note.textContent = 'Describe what you want first.'; return; }
+      resultHtml = null;
+      resultBox.textContent = 'Writing…';
+      var anchor = aiAnchor();
+      note.textContent = '';
+      aiAsk(buildDesignContext(),
+        'Write ONE new HTML element (a single top-level element) for this page.\nInstruction: ' + inst +
+        '\nReturn JSON only, in the form {"html": "<element …>…</element>"}.' +
+        (anchor ? '\n\nIt will be inserted after this existing block, so match its shape:\n' + anchor.outerHTML.slice(0, 600) : ''),
+        { json: true, maxTokens: 900 })
+        .then(function (out) {
+          var html = aiSanitize(out && out.html, 'section');
+          if (!html) throw new Error('The model returned empty content. Try again.');
+          resultHtml = html;
+          resultBox.textContent = '';
+          resultBox.append(h('strong', { textContent: 'Preview: ' }),
+            h('div', { className: 'ed-ai-render', innerHTML: html }),
+            h('p', { className: 'ed-note', textContent: 'Apply inserts it after the last editable block on this page. For another spot, hover a block and use its AI button.' }));
+        })
+        .catch(function (e) { resultBox.textContent = ''; resultBox.append(h('p', { className: 'ed-note', textContent: e.message })); });
+    }
+    drawer('AI · write with OpenRouter', [
+      h('h3', { textContent: 'Settings' }),
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'OpenRouter API key' }), keyIn,
+        h('small', { textContent: 'Free key from openrouter.ai/keys. Stored only in this browser; sent only to openrouter.ai.' })]),
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'Model (free)' }), modelSel, modelCustom,
+        h('small', { textContent: 'openrouter/free picks a free model automatically. Free models have strict rate limits.' })]),
+      note,
+      h('h3', { textContent: 'Write content' }),
+      h('label', { className: 'ed-field' }, [h('span', { textContent: 'What should it write?' }), promptIn]),
+      h('p', { className: 'ed-ai-run' }, [tool('Generate', 'Ask the AI to write a new block for this page', generate)]),
+      resultBox,
+      h('p', { className: 'ed-ai-run' }, [tool('Apply to page', 'Insert the generated block after the last editable block on this page', function () {
+        try {
+          if (!resultHtml) throw new Error('Generate something first.');
+          var anchor = aiAnchor();
+          if (!anchor) throw new Error('No editable block on this page to insert after.');
+          insertAfter(anchor, resultHtml);
+          refreshBar('AI block added — undoable like any other edit.');
+        } catch (e) { alert(e.message); }
+      })])
+    ]);
+  }
+
+  // Per-block AI: rewrite the words of a text unit, or write a new block after any block.
+  function openAiFor(it) {
+    syncUnits();
+    var k = keyOf(it), s = srcEl(k);
+    if (!s) return;
+    var isText = kindOf(k) === 't';
+    var result = null, running = false;
+    var note = h('p', { className: 'ed-note', textContent: isText
+      ? 'The AI rewrites the words inside this block; its structure and style stay.'
+      : 'The AI writes one new block to add after this one, using the site’s own classes.' });
+    var custom = h('input', { placeholder: '…or type your own instruction' });
+    var choices = h('div', { className: 'ed-choices' });
+    var preview = h('div', { className: 'ed-ai-preview' });
+    var list = (isText ? [
+      ['Rewrite', 'Rewrite this text keeping the same meaning and similar length.'],
+      ['Improve', 'Improve this text: clearer and more engaging, same meaning.'],
+      ['Shorter', 'Make this text about half as long, keeping the key point.'],
+      ['Longer', 'Expand this text with a little more detail, same tone.']
+    ] : []).concat(AI_HOOKS.actions || []);
+    function run(instruction) {
+      if (running) return;
+      running = true;
+      result = null;
+      preview.textContent = 'Writing…';
+      var user = isText
+        ? 'Rewrite the content of this HTML block.\nInstruction: ' + instruction +
+          '\nReturn only the new inner HTML of the block (keep useful inline formatting like <em>, <strong>, <br> and links).\n\nBlock:\n' + s.outerHTML
+        : 'Write ONE new HTML element (a single top-level element) to insert after the block below on this page.\nInstruction: ' + instruction +
+          '\nReturn JSON only, in the form {"html": "<element …>…</element>"}.\nMark editable text elements data-e="t0" (list items data-e="i0").\n\nThe block it goes after:\n' + s.outerHTML.slice(0, 800);
+      aiAsk(buildDesignContext(), user, { json: !isText, maxTokens: isText ? 600 : 900 })
+        .then(function (out) {
+          var html = aiSanitize(isText ? out : out && out.html, isText ? 'text' : 'section');
+          if (!html || !html.trim()) throw new Error('The model returned empty content. Try again.');
+          result = html;
+          preview.textContent = '';
+          preview.append(h('strong', { textContent: 'Preview: ' }), h('div', { className: 'ed-ai-render', innerHTML: html }));
+        })
+        .catch(function (e) { preview.textContent = ''; preview.append(h('p', { className: 'ed-note', textContent: e.message })); })
+        .then(function () { running = false; });
+    }
+    list.forEach(function (a) {
+      choices.append(h('button', { type: 'button', className: 'ed-choice', on: { click: function () { run(a[1]); } } },
+        [h('strong', { textContent: a[0] }), h('small', { textContent: a[1] })]));
+    });
+    modal('AI · ' + (isText ? 'this text' : 'add after this'), [
+      note,
+      h('h3', { textContent: 'Quick actions' }),
+      choices,
+      h('div', { className: 'ed-field' }, [h('span', { textContent: 'Custom instruction' }), custom]),
+      h('p', { className: 'ed-ai-run' }, [tool('Run', 'Run the custom instruction above', function () {
+        if (custom.value.trim()) run(custom.value.trim());
+      })]),
+      preview
+    ], function () {
+      if (!result) throw new Error('Nothing generated yet — run an action first.');
+      if (isText) commit({ t: 'text', id: 'text:' + k, k: k, html: result });
+      else insertAfter(it, result);
+      refreshBar('AI edit applied — undoable like any other edit.');
+    });
+  }
+
   /* -------------------------------------------------------------- styles */
   var css = [
     ':root{--ed-ink:#1d1a16;--ed-paper:#fbf6ec;--ed-gold:#c98a2e;--ed-line:rgba(0,0,0,.18)}',
@@ -1419,9 +1743,12 @@
     '.ed-data details{border-left:2px solid var(--ed-line);padding-left:10px;margin:6px 0}',
     '.ed-data summary{cursor:pointer;font-weight:600;padding:4px 0}',
     '.ed-row{position:relative;padding-top:4px}.ed-row__tools{float:right;display:flex;gap:2px}.ed-row__tools .ed-btn{padding:1px 6px;font-size:12px}',
+    '.ed-ai-run{display:flex;gap:6px;align-items:center;margin:0 0 8px}',
+    '.ed-ai-preview{margin-top:10px}',
+    '.ed-ai-render{border:1px solid var(--ed-line);border-radius:8px;padding:10px;background:#fff;margin:6px 0;max-height:240px;overflow:auto}',
     '@media (max-width:700px){body{padding-bottom:170px}.ed-status{order:9;flex-basis:100%}.ed-end{margin-left:0}.ed-drawer{bottom:0}}'
   ].join('\n');
-  document.head.append(h('style', { textContent: css }));
+  document.head.append(h('style', { 'data-ed-ui': '', textContent: css }));
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

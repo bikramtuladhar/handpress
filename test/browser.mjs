@@ -1,7 +1,8 @@
 /**
  * Drives the example site in a real browser: edit text, edit a shared block, duplicate a
  * list item, undo / redo, reload (the draft survives), edit the data file, save, and check
- * what was committed.
+ * what was committed. Then the AI assistant, with OpenRouter mocked: settings, drawer
+ * generate (sanitized, undoable), and a per-block rewrite.
  *
  *   npm i -D playwright-core          (and a local Chrome)
  *   SITE_ROOT=$PWD/example/site node test/mock-github.mjs &
@@ -88,5 +89,66 @@ assert.equal(idx.match(/class="card"/g).length, 3, 'card duplicated');
 assert.match(fs.readFileSync(SITE + 'about.html', 'utf8'), /est\. 2011/, 'footer written to the other page too');
 assert.match(fs.readFileSync(SITE + 'data.js', 'utf8'), /7am – 2pm/);
 console.log('commit:', fs.readFileSync(process.env.MOCK_LOG || '/tmp/mock-github.log', 'utf8').trim().slice(0, 150));
+// --- AI assistant: OpenRouter mocked — settings, drawer generate, sanitize, undo, per-block rewrite ---
+await page.route('https://openrouter.ai/api/v1/models', route => route.fulfill({
+  contentType: 'application/json',
+  body: JSON.stringify({ data: [
+    { id: 'test/model-free', name: 'Test Free', pricing: { prompt: '0', completion: '0' } },
+    { id: 'paid/model', name: 'Paid', pricing: { prompt: '0.001', completion: '0.002' } }
+  ] })
+}));
+let aiSections = 0;
+await page.route('https://openrouter.ai/api/v1/chat/completions', route => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  const content = body.response_format
+    ? JSON.stringify({ html: aiSections++ === 0
+        ? '<p class="lede" data-e="t0">Fresh AI bread, warm from the oven.<script>alert(1)</script></p>'
+        : '<p class="lede">Second AI block, no keys given.<script>alert(1)</script></p>' })
+    : 'Bread, slowly — rewritten by the test.';
+  route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }) });
+});
+const aiBlockKey = text => page.evaluate(t => {
+  const n = Array.from(document.querySelectorAll('[data-e]')).find(e => e.textContent.includes(t));
+  return n ? n.getAttribute('data-e') : null;
+}, text);
+
+await ready();
+await page.locator('.ed-bar button', { hasText: /^AI$/ }).click();
+await page.locator('.ed-drawer input[type=password]').fill('sk-or-test');
+await page.waitForFunction(() => Array.from(document.querySelectorAll('.ed-drawer select option')).some(o => o.value === 'test/model-free'));
+await page.locator('.ed-drawer select.ed-select').selectOption('test/model-free');
+assert.equal(await page.locator('.ed-drawer select.ed-select option', { hasText: 'paid/model' }).count(), 0, 'paid models filtered out');
+assert.equal(await page.evaluate(() => JSON.parse(localStorage['ed-ai'] || '{}').key), 'sk-or-test', 'key saved to localStorage');
+await page.locator('.ed-drawer textarea').fill('a short line about fresh bread');
+await page.locator('.ed-ai-run button', { hasText: 'Generate' }).click();
+await page.locator('.ed-drawer .ed-ai-render').waitFor({ state: 'visible' });
+assert.match(await page.locator('.ed-drawer .ed-ai-render').textContent(), /Fresh AI bread/, 'AI section preview rendered');
+assert.equal(await page.locator('.ed-drawer .ed-ai-render script').count(), 0, 'script stripped from AI output');
+await page.locator('.ed-ai-run button', { hasText: 'Apply to page' }).click();
+await page.waitForFunction(() => /Fresh AI bread/.test(document.body.textContent));
+assert.match(await saveLabel(), /\(1\)/, 'AI insert is a draft edit');
+assert.match(await aiBlockKey('Fresh AI bread'), /^[tmi]\d+$/, 'AI block got a fresh editable key');
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+assert.doesNotMatch(await page.locator('body').textContent(), /Fresh AI bread/, 'undo removed the AI block');
+
+// A model that forgets the data-e keys still yields an editable block (aiKeyFallback).
+await page.locator('.ed-bar button', { hasText: /^AI$/ }).click();
+await page.locator('.ed-drawer textarea').fill('another line');
+await page.locator('.ed-ai-run button', { hasText: 'Generate' }).click();
+await page.locator('.ed-drawer .ed-ai-render').waitFor({ state: 'visible' });
+await page.locator('.ed-ai-run button', { hasText: 'Apply to page' }).click();
+await page.waitForFunction(() => /Second AI block/.test(document.body.textContent));
+assert.match(await aiBlockKey('Second AI block'), /^[tmi]\d+$/, 'keyless AI output still made editable');
+await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
+console.log('ai drawer generate + sanitize + fallback keys + undo ok');
+
+await page.locator('[data-e="t2"]').click();           // the h1: click into the text, then AI → Rewrite
+await page.locator('.ed-item button[title^="Rewrite this text"]').click();
+await page.locator('dialog .ed-choice', { hasText: 'Rewrite' }).first().click();
+await page.locator('dialog .ed-ai-render').waitFor({ state: 'visible' });
+await page.locator('dialog button', { hasText: /^Apply$/ }).click();
+assert.match(await page.locator('[data-e="t2"]').textContent(), /rewritten by the test/, 'per-block AI rewrite applied');
+console.log('ai per-block rewrite ok');
+
 console.log('errors:', errors);
 await browser.close();

@@ -102,12 +102,20 @@ owner gets handles right on the page and sees changes before saving:
 window.EDITOR_HOOKS = {
   dataRegions: [['[data-events]', 'data.js', 'events', 'Events']],   // one child element per entry
   dataChanged: function (path, obj) { if (path === 'data.js') { window.SITE = obj; renderEvents(); } },
-  guide: { 'index.html': [['Events come from data.js: “+ Add”, or the handles on each.', '[data-events]']] }
+  guide: { 'index.html': [['Events come from data.js: “+ Add”, or the handles on each.', '[data-events]']] },
+  ai: { context: 'Voice notes the AI writes with (warm, plain, concrete).',
+        actions: [['Event line', 'Rewrite as a one-line event listing: name, date, one detail.']] }
 };
 ```
 
 `guide` gives each page tips with a “Show me” button; write one or two per page for whatever the
 owner is likely to change.
+
+`ai` feeds the built-in AI assistant (free OpenRouter models, key pasted by the owner under
+AI → Settings, kept in the browser): `context` is brand-voice guidance, `model` an optional default
+OpenRouter model id, and `actions` extra quick actions in each block's AI menu. The AI writes with
+the site's own design — colours, classes and section shapes are collected from the page itself —
+and its output is sanitized and applied as an ordinary edit.
 
 ## Things that go wrong
 

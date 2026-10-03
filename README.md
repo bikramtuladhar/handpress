@@ -50,6 +50,7 @@ Handpress keeps the HTML as the source of truth and teaches the browser to edit 
 | **Page settings** | Title, meta description, and the text shown when the page is shared. |
 | **Site data** | A form over your JSON data file, for lists the site renders from data. Lists on the page get handles too (move, duplicate, edit, remove, add, add images), and redraw as they change. |
 | **Guide** | Tips for each page, with a *Show me* button; opens by itself the first time a page is edited. |
+| **AI assistant** | Hover a block → **AI** to rewrite its text, or the **AI** bar button to write a whole new block — free models through [OpenRouter](https://openrouter.ai) (your own free key, kept in the browser, sent only to OpenRouter). It writes with your site's design: colours, classes, section shapes and voice (see `EDITOR_HOOKS.ai`). AI edits undo, draft and Save like any typed change. |
 
 ![Duplicating and reordering list items](docs/images/lists.png)
 ![The site data panel](docs/images/site-data.png)
