@@ -1,0 +1,4 @@
+# The assets directory is the whole demo folder; keep local-only files off the site.
+wrangler.jsonc
+.dev.vars
+.wrangler

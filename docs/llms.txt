@@ -59,19 +59,20 @@ Save replays each edited page's operations onto the current file and commits all
 Editors can: type text; bold/italic/links/colour/size/font; duplicate, move, remove, copy and paste
 blocks and whole sections (<main> is keyed as a list), including across pages; replace images;
 change YouTube embeds (iframe .../embed/ID or [data-yt-id]) and audio (<audio>, [data-audio]);
-edit <select> options; edit page meta; edit the data file as a form; rewrite a block's text or
-write a new block with free AI models through OpenRouter (the editor calls openrouter.ai directly
-from the browser; the owner pastes their own free key under AI → Settings, stored in localStorage
-and sent only to OpenRouter; generated HTML is sanitized and committed as an ordinary op, so it
-undoes, drafts and saves like any typed change).
+edit <select> options; edit page meta; edit the data file as a form; rewrite an existing block in
+place (its text, or a whole card or section — structure and data-e keys are checked and preserved)
+or write a new block, with free AI models through OpenRouter or opencode Zen (the editor calls the
+chosen provider directly from the browser; the owner pastes their own key under AI → Settings,
+stored in localStorage and sent only to that provider; generated HTML is sanitized and committed as
+an ordinary op, so it undoes, drafts and saves like any typed change).
 
 Per-site quirks and extras go in window.EDITOR_HOOKS: beforeEdit(el) to detach an element the site
 animates; syncUnit(sourceEl, liveEl) to keep an attribute in step with edited text (liveEl may be
 null); dataRegions [[selector, file, path, label]] for on-page handles on lists drawn from data;
 dataChanged(path, obj) to redraw from unsaved data; blocks [[label, html]] for "+ New"; fonts
 [[label, css]] for Style; guide {page: [[tip, selector]]} for the per-page Guide; ai
-{context: brand-voice notes, model: default OpenRouter model id, actions: [[label, instruction]]}
-for the AI assistant.
+{context: brand-voice notes, provider: 'openrouter'|'opencode', model: that provider's default model
+id, actions: [[label, instruction]]} for the AI assistant.
 Uploads (uploadDir): jpg png webp gif svg mp3 m4a ogg.
 
 ## Links
