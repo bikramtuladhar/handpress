@@ -1411,39 +1411,47 @@
         return (d.data || []).filter(function (m) { return m.pricing && (+m.pricing.prompt === 0 || /:free$/.test(m.id)); })
           .filter(function (m) { return !/rerank|embedding|whisper|tts|moderation/i.test(m.id); })
           .sort(function (a, b) { return (/:free$/.test(b.id) ? 1 : 0) - (/:free$/.test(a.id) ? 1 : 0) || String(a.name).localeCompare(String(b.name)); })
-          .slice(0, 30)
           .map(function (m) { return [m.id, m.name + (/:free$/.test(m.id) ? ' (free)' : '')]; });
       }
     },
     opencode: {
       label: 'opencode Zen',
+      // ponytail: hidden while Zen sends no CORS headers (every /zen/v1 route fails from a browser).
+      // Drop this line once a page can call it; the rest still works.
+      hidden: true,
       base: 'https://opencode.ai/zen/v1',
       keyHint: 'Zen key from opencode.ai/auth',
       keyHelp: 'Zen key from opencode.ai/auth.',
       defaultModel: 'nemotron-3-ultra-free',
       defaultLabel: 'nemotron-3-ultra-free (free)',
       headers: function (key) { return { 'Authorization': 'Bearer ' + key }; },
+      // The list comes from models.dev, the catalogue opencode itself reads (Zen's own /models is
+      // CORS-blocked too). It says what each model costs and which API it speaks: no provider.npm
+      // means /chat/completions; the rest use /messages, /responses or Google's shape.
       models: async function () {
-        var d = await (await fetch('https://opencode.ai/zen/v1/models')).json();
-        return (d.data || []).map(function (m) { return m.id; })
-          .filter(zenChatModel)
-          .sort(function (a, b) { return (/free$/.test(b) ? 1 : 0) - (/free$/.test(a) ? 1 : 0) || String(a).localeCompare(String(b)); })
-          .map(function (id) { return [id, id + (/free$/.test(id) ? ' (free)' : '')]; });
+        var d = await (await fetch('https://models.dev/api.json')).json(), ms = (d.opencode && d.opencode.models) || {};
+        return Object.keys(ms).map(function (id) { return ms[id]; })
+          .filter(function (m) {
+            var npm = m.provider && m.provider.npm, out = m.modalities && m.modalities.output;
+            return (!npm || npm === '@ai-sdk/openai-compatible') && m.status !== 'deprecated' && (!out || out.indexOf('text') >= 0);
+          })
+          .map(function (m) {
+            var free = !!m.cost && +m.cost.input === 0 && +m.cost.output === 0;
+            return [m.id, (m.name || m.id) + (free ? ' (free)' : ''), free];
+          })
+          .sort(function (a, b) { return b[2] - a[2] || a[1].localeCompare(b[1]); })
+          .map(function (m) { return [m[0], m[1]]; });
       }
     }
   };
-  // Zen serves only some families on /chat/completions; the rest use /messages, /responses or a
-  // Google-shaped route this simple client cannot speak, so they are left out of the list.
-  function zenChatModel(id) {
-    if (/^(claude|gemini|gpt|grok|muse-spark|jev)/.test(id)) return false;
-    return !/^qwen3\.[56]/.test(id) && id !== 'qwen3.8-flash';
-  }
+
+  function aiHas(id) { return !!AI_PROVIDERS[id] && !AI_PROVIDERS[id].hidden; }
 
   // Settings in localStorage (ed-ai): { provider, models: {provider: model id}, sealed: {provider: encrypted key} }.
   function aiRaw() { try { var s = JSON.parse(localStorage.getItem(AI_KEY)); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; } }
   function aiSettings() {
-    var def = AI_PROVIDERS[AI_HOOKS.provider] ? AI_HOOKS.provider : 'openrouter';
-    var s = aiRaw(), d = { provider: AI_PROVIDERS[s.provider] ? s.provider : def, models: {}, sealed: s.sealed || {} };
+    var def = aiHas(AI_HOOKS.provider) ? AI_HOOKS.provider : 'openrouter';
+    var s = aiRaw(), d = { provider: aiHas(s.provider) ? s.provider : def, models: {}, sealed: s.sealed || {} };
     if (AI_HOOKS.model) d.models[def] = AI_HOOKS.model;          // the hook's default, until the owner picks one
     if (!s.provider && s.model) d.models.openrouter = s.model;  // the earliest single-OpenRouter shape
     Object.assign(d.models, s.models || {});
@@ -1711,7 +1719,7 @@
       var next = this.value;
       aiPatch(function (x) { x.provider = next; });
       openAi(t, modeSel.value);                                // redraw for the chosen provider
-    } } }, Object.keys(AI_PROVIDERS).map(function (id) {
+    } } }, Object.keys(AI_PROVIDERS).filter(aiHas).map(function (id) {
       return h('option', { value: id, textContent: AI_PROVIDERS[id].label, selected: id === pid });
     }));
     function setModel(v) { aiPatch(function (x) { x.models[pid] = v; }); }

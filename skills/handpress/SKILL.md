@@ -112,7 +112,7 @@ window.EDITOR_HOOKS = {
 `guide` gives each page tips with a “Show me” button; write one or two per page for whatever the
 owner is likely to change.
 
-`ai` feeds the built-in AI assistant (free models through OpenRouter or opencode Zen; the owner
+`ai` feeds the built-in AI assistant (free models through OpenRouter; the owner
 pastes their own key under AI → Settings and it stays in the browser): `context` is brand-voice
 guidance, `provider` picks the default provider, `model` that provider's default model id, and
 `actions` extra quick actions in the AI panel's rewrite mode. The panel is movable; the editor

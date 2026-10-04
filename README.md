@@ -50,7 +50,7 @@ Handpress keeps the HTML as the source of truth and teaches the browser to edit 
 | **Page settings** | Title, meta description, and the text shown when the page is shared. |
 | **Site data** | A form over your JSON data file, for lists the site renders from data. Lists on the page get handles too (move, duplicate, edit, remove, add, add images), and redraw as they change. |
 | **Guide** | Tips for each page, with a *Show me* button; opens by itself the first time a page is edited. |
-| **AI assistant** | One panel you can drag anywhere. Pick any block on the page (a heading, a card, a whole section, the empty canvas) and tell it what to do: **rewrite** the words in place (layout and keys kept), **redesign** it (layout may change), **build** new content inside it, or **add** a block after it. Every result shows as a preview *and* as HTML you can edit by hand before Apply, and **Edit HTML** opens any block's own HTML. The AI is given the page's CSS (custom properties, element and class rules in use) and its HTML outline, so it writes with your design. Free models through [OpenRouter](https://openrouter.ai) or [opencode Zen](https://opencode.ai/docs/zen/), with the provider and model picked in the panel. Your own key, stored encrypted in the browser and sent only to the provider you chose. AI edits undo, draft and Save like any typed change. |
+| **AI assistant** | One panel you can drag anywhere. Pick any block on the page (a heading, a card, a whole section, the empty canvas) and tell it what to do: **rewrite** the words in place (layout and keys kept), **redesign** it (layout may change), **build** new content inside it, or **add** a block after it. Every result shows as a preview *and* as HTML you can edit by hand before Apply, and **Edit HTML** opens any block's own HTML. The AI is given the page's CSS (custom properties, element and class rules in use) and its HTML outline, so it writes with your design. Free models through [OpenRouter](https://openrouter.ai), with the model picked in the panel (opencode Zen is built in but hidden until it accepts calls from web pages). Your own key, stored encrypted in the browser and sent only to the provider you chose. AI edits undo, draft and Save like any typed change. |
 | **New pages** | With `newPages` on, **New page** makes an empty page (your head, header and footer around a blank canvas): click the canvas and build it section by section with AI, or start from a **starter kit** (landing page, studio / portfolio, the bakery example) as is or adapted by the AI. Starting from nothing? `npx handpress blank public/index.html`, or `--kit landing` (`studio`, `bakery`) for a keyed first draft. |
 
 ![Duplicating and reordering list items](docs/images/lists.png)
@@ -158,7 +158,7 @@ Everything else is closed by default:
 - The only outside hosts are `accounts.google.com` (the sign-in button),
   `oauth2.googleapis.com` (checking the sign-in token) and, for the Worker, `api.github.com`
   (reading files and committing saves; `GITHUB_API` overrides it). The AI assistant, when an
-  editor uses it, calls `openrouter.ai` or `opencode.ai` from the editor's browser only. The PHP half writes to disk
+  editor uses it, calls `openrouter.ai` from the editor's browser only. The PHP half writes to disk
   and never calls GitHub. There is no telemetry.
 
 ## Working on Handpress
