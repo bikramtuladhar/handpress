@@ -164,6 +164,7 @@ npx handpress install ./public</code></pre>
 <pre><code>"vars": {
   "GITHUB_REPO": "you/your-site",
   "GITHUB_BRANCH": "main",
+  "SITE_DIR": "public",
   "GOOGLE_CLIENT_ID": "…apps.googleusercontent.com",
   "EDITOR": {
     "pages": ["index.html", "about.html"],
@@ -209,6 +210,7 @@ wrangler secret put ADMIN_EMAILS     # comma-separated Google addresses allowed 
       <tbody>
         <tr><td><code>GITHUB_REPO</code></td><td>var</td><td><code>owner/repo</code> that saves are committed to.</td></tr>
         <tr><td><code>GITHUB_BRANCH</code></td><td>var</td><td>Branch to read and commit, usually <code>main</code>.</td></tr>
+        <tr><td><code>SITE_DIR</code></td><td>var</td><td>The folder in the repo that holds the site, the same one as <code>assets.directory</code> (e.g. <code>public</code>). Leave it out when the site is at the repo root.</td></tr>
         <tr><td><code>GOOGLE_CLIENT_ID</code></td><td>var</td><td>OAuth client ID used by the sign-in page.</td></tr>
         <tr><td><code>GITHUB_TOKEN</code></td><td>secret</td><td>Fine-grained token, that repository only, Contents: read and write.</td></tr>
         <tr><td><code>SESSION_SECRET</code></td><td>secret</td><td>Signs the session cookie. Any long random string.</td></tr>

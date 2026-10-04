@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { signSession, readSession, isAdmin, isEditable, isUpload, checkFile } from './src/lib.js';
+import { signSession, readSession, isAdmin, isEditable, isUpload, checkFile, repoPath } from './src/lib.js';
 import { annotate } from './src/annotate.mjs';
 
 const cfg = {
@@ -66,6 +66,10 @@ assert.match(blank, /<main data-e-canvas="" data-e-list="" data-e="i\d+"><\/main
 assert.equal(annotate(blank), blank, 'canvas keying is idempotent');
 assert.match(annotate('<!doctype html><html><head></head><body><main></main></body></html>'),
   /<main data-e-canvas="" data-e-list="" data-e="i\d+"><\/main>/, 'an empty <main> becomes a canvas');
+
+// SITE_DIR: site paths become repo paths
+for (const d of [undefined, '', '/']) assert.equal(repoPath(d, 'index.html'), 'index.html');
+for (const d of ['public', 'public/', './public', '/public/']) assert.equal(repoPath(d, 'uploads/a.jpg'), 'public/uploads/a.jpg');
 
 // handpress blank --kit: every starter kit makes a keyed page that `keys` leaves alone
 const tmp = fs.mkdtempSync('/tmp/hp-');

@@ -72,3 +72,7 @@ export function checkFile(f, cfg) {
 export function decodeBase64Utf8(b64) {
   return new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
 }
+
+// SITE_DIR: the repo folder that holds the site (the assets directory, e.g. "public"). Paths the
+// editor sends are relative to the site; GitHub wants them relative to the repo.
+export const repoPath = (dir, p) => String(dir || '').replace(/^\.?\/+|\/+$/g, '').replace(/.+/, '$&/') + p;

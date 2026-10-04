@@ -80,6 +80,7 @@ And a back end. On Cloudflare, point a Worker at `src/worker.js`:
 "vars": {
   "GITHUB_REPO": "you/your-site",
   "GITHUB_BRANCH": "main",
+  "SITE_DIR": "public",                            // the repo folder holding the site ("" if it's the root)
   "GOOGLE_CLIENT_ID": "…apps.googleusercontent.com",
   "EDITOR": {
     "pages": ["index.html", "about.html"],        // the only pages that can be edited

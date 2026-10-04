@@ -68,6 +68,7 @@ On Cloudflare, point a Worker at `node_modules/handpress/src/worker.js` and conf
 "vars": {
   "GITHUB_REPO": "owner/repo",
   "GITHUB_BRANCH": "main",
+  "SITE_DIR": "public",            // the repo folder that is assets.directory; omit if it's the root
   "GOOGLE_CLIENT_ID": "…apps.googleusercontent.com",
   "EDITOR": {
     "pages": ["index.html", "about.html"],
@@ -134,7 +135,9 @@ first draft instead of an empty canvas.
   attribute in step with the text.
 - **Elements invisible while editing.** A reveal-on-scroll animation. Set `forceVisible` in the
   config to the selector it uses.
-- **"This page can't be edited."** The page is not in `pages`, or it is not keyed.
+- **"This page can't be edited."** The page is not in `pages`, or it is not keyed. "…is not in
+  owner/repo" means the Worker looked at the repo root: set `SITE_DIR` to the folder that is
+  `assets.directory` (e.g. `public`).
 - **The editor never leaves "Publishing…".** On a deploy-based host, the built site does not
   match the commit — check the deploy actually ran.
 - **A save is refused as changed.** Someone else saved that file first. Reload and redo it.

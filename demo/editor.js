@@ -352,6 +352,7 @@
   }
   function lock(msg) {
     setEditing(false);
+    if (aiPanel) { aiPanel.remove(); aiPanel = null; }
     $$('.ed-btn, .ed-select', bar).forEach(function (b) { if (!/Sign out|Reload/.test(b.textContent)) b.disabled = true; });
     status.textContent = msg;
   }
@@ -1368,7 +1369,7 @@
         bar.append(h('a', { className: 'ed-btn ed-btn--gold', href: '/admin?next=' + encodeURIComponent(location.pathname), textContent: 'Sign in' }));
         return;
       }
-      return lock(e.status === 400 || e.status === 404 ? 'This page can’t be edited.' : 'Editor unavailable: ' + e.message);
+      return lock(e.status === 400 || e.status === 404 ? 'This page can’t be edited. ' + e.message : 'Editor unavailable: ' + e.message);
     }
     var live = await fetchServed(PAGE);
     if (live !== f.content) return waitForPublish(PAGE, f.content, 'A newer version of this page is still publishing. It will refresh by itself when live.');
@@ -1695,6 +1696,7 @@
   ]/*end*/;
 
   async function openAi(target, mode) {
+    if (!src) return;                                         // still loading, or the page can't be edited
     syncUnits();
     stopPicking();
     if (aiPanel) aiPanel.remove();
