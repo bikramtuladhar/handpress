@@ -2,6 +2,7 @@
 /**
  *   handpress install <site-directory>          copy editor.js and admin.html into the site
  *   handpress keys "<glob>" [--global "header, footer"]   add the keys the editor edits by
+ *   handpress blank <page.html> [--title "My site"]       a new, empty page to build with the editor's AI
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +13,8 @@ const [command, ...rest] = process.argv.slice(2);
 
 const usage = () => {
   console.error(`handpress install <site-directory> [--php]
-handpress keys "<glob>" [--global "header, footer"]`);
+handpress keys "<glob>" [--global "header, footer"]
+handpress blank <page.html> [--title "My site"]`);
   process.exit(1);
 };
 
@@ -49,6 +51,35 @@ if (command === 'install') {
     fs.writeFileSync(f, out);
     console.log(f, (out.match(/data-e="/g) || []).length, 'keys,', (out.match(/data-e-list/g) || []).length, 'lists');
   }
+} else if (command === 'blank') {
+  // A site from nothing: a page with a few design tokens and an empty canvas. Sign in, click the
+  // canvas, and the AI builds it section by section. It loads the editor itself, for editors only.
+  const dest = rest.find(a => !a.startsWith('--'));
+  if (!dest || !dest.endsWith('.html')) usage();
+  if (fs.existsSync(dest)) { console.error(dest, 'already exists'); process.exit(1); }
+  const ti = rest.indexOf('--title');
+  const title = (ti < 0 ? 'New site' : rest[ti + 1] || 'New site').replace(/[<&]/g, '');
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+:root { --ink: #1c1b19; --muted: #6b675f; --paper: #fbfaf7; --accent: #2f5fd0; --radius: 14px; --max: 1080px; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 17px/1.6 system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+main > * { padding: 72px max(20px, calc((100% - var(--max)) / 2)); }
+h1, h2, h3 { line-height: 1.15; margin: 0 0 .5em; }
+h1 { font-size: clamp(2.2rem, 6vw, 4rem); }
+h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
+img { max-width: 100%; height: auto; border-radius: var(--radius); }
+a { color: var(--accent); }
+</style>
+</head><body><main data-e="i1" data-e-list="" data-e-canvas=""></main>
+<script>if (/(?:^|;\s*)ed=1/.test(document.cookie)) { var s = document.createElement('script'); s.src = '/editor.js'; s.defer = true; document.head.appendChild(s); }</script>
+</body></html>
+`);
+  console.log('wrote', dest, '\nNext: list it under pages (or set newPages: true), sign in, and click the empty canvas.');
 } else {
   usage();
 }

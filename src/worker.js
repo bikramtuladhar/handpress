@@ -108,6 +108,9 @@ async function commit(env, files, message, email) {
   const current = new Map((await gh(env, `git/trees/${baseTree}?recursive=1`)).tree.map(t => [t.path, t.sha]));
   const stale = files.filter(f => f.sha && current.get(f.path) !== f.sha).map(f => f.path);
   if (stale.length) throw fail(409, `Changed since you opened it: ${stale.join(', ')}. Reload the page and redo your edit.`);
+  // A text file sent without a sha is a new file: it must not overwrite one that exists.
+  const taken = files.filter(f => f.content != null && !f.sha && current.has(f.path)).map(f => f.path);
+  if (taken.length) throw fail(409, `Already exists: ${taken.join(', ')}. Pick another name.`);
 
   const tree = [];
   for (const f of files) {

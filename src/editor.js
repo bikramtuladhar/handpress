@@ -21,7 +21,8 @@
 (function () {
   'use strict';
 
-  var PAGES = [];          // from /api/config
+  var PAGES = [];          // from /api/config (plus pages made here, with newPages on)
+  var CFG_PAGES = [], NEW_PAGES = false;
   var DATA_FILES = {};     // from /api/config: { 'path/to/data.js': 'label shown in the panel' }
   var GLOBAL_BLOCKS = [];  // selectors of blocks shared by every page (header, footer, …)
   var UPLOAD_DIR = 'uploads';
@@ -43,7 +44,7 @@
   // time each page is edited.
   var GUIDE = HOOKS.guide || {};
   var PAGE = pageFile(location.pathname);
-  var DRAFT_KEY = 'ed-draft', CLIP_KEY = 'ed-clip', AI_KEY = 'ed-ai';
+  var DRAFT_KEY = 'ed-draft', CLIP_KEY = 'ed-clip', AI_KEY = 'ed-ai', PAGES_KEY = 'ed-pages';
   // The AI assistant (OpenRouter or opencode Zen, browser-direct). Per-site extras in
   // window.EDITOR_HOOKS.ai: { context: brand-voice notes, provider: 'openrouter'|'opencode',
   // model: that provider's default model id, actions: [[label, instruction], …] }.
@@ -81,7 +82,7 @@
   function liveEl(k) { return byKey(document, k); }
   function parseHtml(text) { return new DOMParser().parseFromString(text, 'text/html'); }
   function serialize(d) { return '<!DOCTYPE html>' + d.documentElement.outerHTML; } // same output as scripts/annotate.mjs
-  function fragment(d, html) { var t = d.createElement('template'); t.innerHTML = html; return t.content.firstElementChild; }
+  function fragments(d, html) { var t = d.createElement('template'); t.innerHTML = html; return Array.prototype.slice.call(t.content.children); }
   function safeUrl(u) { return !/^\s*(javascript|data|vbscript):/i.test(u); }
 
   async function api(path, body) {
@@ -114,9 +115,9 @@
   }
   // New images wait for Save in IndexedDB (localStorage holds only ~5 MB): path → { path, type, b64 }.
   var ups = {};
-  function idb(mode, fn) {
+  function idb(mode, fn, db) {
     return new Promise(function (ok, no) {
-      var r = indexedDB.open('ed-uploads', 1);
+      var r = indexedDB.open(db || 'ed-uploads', 1);
       r.onupgradeneeded = function () { r.result.createObjectStore('u'); };
       r.onerror = function () { no(r.error); };
       r.onsuccess = function () {
@@ -167,7 +168,7 @@
     refreshBar();
   }
 
-  // op.t: text | attr | link | img | after | move | del | head | select. Returns false if its target is gone.
+  // op.t: text | attr | link | img | after | in | replace | move | del | head | select. Returns false if its target is gone.
   function apply(op, S, L) {
     var s = byKey(S, op.k), l = byKey(L, op.k);
     if (op.k && !s) return false;
@@ -212,16 +213,16 @@
           });
         });
         break;
-      case 'after': {
-        var node = fragment(S, op.html);
-        s.after(node);
-        noteKeys(node);
-        if (l) {
-          var ln = document.importNode(node, true);
-          $$('img', ln).forEach(function (im) { im.setAttribute('src', liveUrl(im.getAttribute('src'))); });
-          l.after(ln);
-          prepTree(ln);
-        }
+      case 'after': case 'in': case 'replace': {          // new blocks after / inside / instead of op.k
+        var nodes = fragments(S, op.html);
+        nodes.forEach(noteKeys);
+        var lns = l ? nodes.map(function (n) {
+          var ln = document.importNode(n, true);
+          [ln].concat($$('img', ln)).forEach(function (im) { if (im.tagName === 'IMG') im.setAttribute('src', liveUrl(im.getAttribute('src'))); });
+          return ln;
+        }) : [];
+        place(s, op.t, nodes);
+        if (l) { place(l, op.t, lns); lns.forEach(prepTree); }
         break;
       }
       case 'move':
@@ -280,6 +281,7 @@
     }
     return true;
   }
+  function place(n, how, nodes) { n[{ after: 'after', 'in': 'append', replace: 'replaceWith' }[how]].apply(n, nodes); }
   function anchors(el) { return [el.closest('a')].concat($$('a', el)).filter(Boolean); }
   function anchorAt(el, i) { return anchors(el)[i]; }
   function noteKeys(root) {
@@ -320,7 +322,8 @@
         tool('Page', 'Page title, description and all images on this page', openPagePanel),
         tool('Site data', 'Lists and settings the site renders from its data file', openDataPanel),
         tool('Guide', 'What you can change on this page, and how', openGuide),
-        tool('AI', 'Write or improve content with AI (OpenRouter)', openAiDrawer)
+        tool('AI', 'Write, rewrite, redesign or build with AI: pick any spot on the page', function () { openAi(); }),
+        NEW_PAGES ? tool('New page', 'Start a new, empty page and build it with AI', newPage) : null
       ]),
       status,
       h('span', { className: 'ed-group ed-end' }, [
@@ -424,6 +427,7 @@
   }
   function onKey(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); return save(); }
+    if (e.key === 'Escape' && picking) { stopPicking(); return; }
     var inText = e.target.closest && e.target.closest('[contenteditable], input, textarea');
     if ((e.metaKey || e.ctrlKey) && !inText && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); return redo(); }
     if ((e.metaKey || e.ctrlKey) && !inText && e.key.toLowerCase() === 'z') { e.preventDefault(); return undo(); }
@@ -441,6 +445,14 @@
   // While editing, clicks never follow links, submit forms, open the lightbox or play audio.
   function onClick(e) {
     if (!editing || e.target.closest('[data-ed-ui]')) return;
+    if (picking) {                                      // the AI panel's "Pick on page"
+      e.preventDefault(); e.stopPropagation();
+      var f = picking, el = e.target.closest('[data-e]');
+      stopPicking();
+      return f(el);
+    }
+    var cv = e.target.closest('[data-e-canvas]');
+    if (cv === e.target && !cv.children.length) { e.preventDefault(); return openAi(cv, 'in'); }
     var img = e.target.closest('img[data-e]');
     var inUnit = e.target.closest('[contenteditable]');
     if (img && !inUnit) { e.preventDefault(); e.stopPropagation(); return openImage(img); }
@@ -697,7 +709,7 @@
       tool('↓', 'Move down', function () { move(current, 1); }),
       linkBtns[0], linkBtns[1],
       tool('🎨', 'Colour, size and font of this block', function () { openStyle(current); }),
-      tool('AI', 'Rewrite this block with AI, or write a new block after it', function () { openAiFor(current); }),
+      tool('AI', 'Rewrite this block with AI, redesign it, build inside it, or add after it', function () { openAi(current); }),
       tool('✕', 'Remove this (Undo, or + → paste, brings it back)', function () { del(current); })
     ]);
     document.body.append(itemBar);
@@ -745,23 +757,33 @@
     return root;
   }
   function gOf(it) { return keyOf(it).charAt(0) === 'g' ? 'g' : ''; }
-  function insertAfter(it, html) {
+  // New blocks after it, inside it (at the end) or instead of it: one op, one undo step.
+  function insertAt(it, html, where) {
     syncUnits();
-    var node = rekey(fragment(src, html), gOf(it));
+    var old = srcEl(keyOf(it)), nodes = fragments(src, html).map(function (n) { return rekey(n, gOf(it)); });
+    if (!nodes.length) throw new Error('Nothing to add.');
     var gone = [];                                      // a copy must not repeat ids (anchors, form labels)
-    [node].concat($$('[id]', node)).forEach(function (n) {
-      if (n.id && src.getElementById(n.id)) { gone.push(n.id); n.removeAttribute('id'); }
-    });
-    [node].concat($$('[aria-labelledby], [aria-describedby], label[for]', node)).forEach(function (n) {
-      ['aria-labelledby', 'aria-describedby', 'for'].forEach(function (a) {
-        var v = n.getAttribute(a);
-        if (v && v.split(/\s+/).some(function (id) { return gone.indexOf(id) >= 0; })) n.removeAttribute(a);
+    nodes.forEach(function (node) {
+      [node].concat($$('[id]', node)).forEach(function (n) {
+        var dup = n.id && src.getElementById(n.id);
+        if (dup && !(where === 'replace' && old.contains(dup))) { gone.push(n.id); n.removeAttribute('id'); }
       });
     });
-    commit({ t: 'after', k: keyOf(it), html: node.outerHTML });
-    var live = liveEl(keyOf(node));
+    nodes.forEach(function (node) {
+      [node].concat($$('[aria-labelledby], [aria-describedby], label[for]', node)).forEach(function (n) {
+        ['aria-labelledby', 'aria-describedby', 'for'].forEach(function (a) {
+          var v = n.getAttribute(a);
+          if (v && v.split(/\s+/).some(function (id) { return gone.indexOf(id) >= 0; })) n.removeAttribute(a);
+        });
+      });
+    });
+    commit({ t: where, k: keyOf(it), html: nodes.map(function (n) { return n.outerHTML; }).join('') });
+    if (where === 'replace') { itemBar.hidden = true; current = null; }
+    var live = liveEl(keyOf(nodes[0]));
     if (live) { showItemBar(live); live.scrollIntoView({ block: 'nearest' }); }
+    return live;
   }
+  function insertAfter(it, html) { return insertAt(it, html, 'after'); }
   function dup(it) { syncUnits(); insertAfter(it, srcEl(keyOf(it)).outerHTML); }
   function move(it, dir) {
     if (!siblings(it)[siblings(it).indexOf(it) + dir]) return;
@@ -1201,7 +1223,8 @@
         if (p === PAGE) { d = src; sha = srcSha; before = null; }
         else {
           refreshBar('Saving… ' + p);
-          var f = await api('file?path=' + p);
+          var f = await api('file?path=' + p).catch(function (e) { if (e.status === 404 && CFG_PAGES.indexOf(p) < 0) return null; throw e; });
+          if (!f) continue;                             // a page made here that is gone from the repo
           d = parseHtml(f.content); sha = f.sha; before = f.content;
           var lost = opsFor(p).filter(function (op) { return !apply(op, d, null) && !isGlobal(op); }).length; // shared-block keys a page lacks are fine
           if (lost) throw new Error(p + ' changed since you edited it (' + lost + ' edit' + (lost > 1 ? 's' : '') + ' no longer fit). Open it, check, and save again.');
@@ -1242,13 +1265,13 @@
   }
 
   // After a save (or when the server is ahead of the live site), wait until the live file matches, then reload.
-  function waitForPublish(path, expected, msg) {
+  function waitForPublish(path, expected, msg, then) {
     lock(msg);
     bar.append(tool('Reload', 'Reload now', function () { location.reload(); }));
     var started = Date.now();
     (function poll() {
       fetchServed(path).then(function (live) {
-        if (live === expected) return location.reload();
+        if (live === expected) return then ? (location.href = then) : location.reload();
         if (Date.now() - started > 4 * 60e3) status.textContent = 'Still publishing after 4 minutes. Check that your deploy succeeded, then Reload.';
         setTimeout(poll, 5000);
       }, function () { setTimeout(poll, 5000); });
@@ -1313,7 +1336,10 @@
     } catch (e) {
       return;                                       // not an editable site, or the API is not reachable
     }
-    PAGES = cfg.pages || [];
+    PAGES = (CFG_PAGES = cfg.pages || []).slice();
+    NEW_PAGES = !!cfg.newPages;
+    // ponytail: pages made with "New page" are remembered per browser; the API does not list the repo
+    if (NEW_PAGES) myPages().concat(/^[a-z0-9][a-z0-9-]*\.html$/.test(PAGE) ? [PAGE] : []).forEach(function (p) { if (PAGES.indexOf(p) < 0) PAGES.push(p); });
     DATA_FILES = cfg.dataFiles || {};
     GLOBAL_BLOCKS = cfg.globalBlocks || [];
     UPLOAD_DIR = cfg.uploadDir || 'uploads';
@@ -1362,11 +1388,11 @@
   }
 
   /* ------------------------------------------------------------------- ai */
-  // Free AI through OpenRouter or opencode Zen, called straight from the browser. Keys live in
-  // localStorage (ed-ai) and go only to the chosen provider. Every result passes through
+  // Free AI through OpenRouter or opencode Zen, called straight from the browser. API keys go only
+  // to the chosen provider and are stored encrypted (see aiVault). Every result passes through
   // aiSanitize and is committed as an ordinary op, so AI edits undo, draft and save like typed
   // changes.
-  var aiCtx = null, aiModelCache = {};         // design-context bundle and per-provider model lists, built once
+  var aiCtx = null, aiModelCache = {}, aiPanel = null, aiPos = null, picking = null;
 
   // AI providers the editor can talk to. Both are OpenAI-compatible: POST {base}/chat/completions.
   // Each keeps its own key and model, so switching back and forth loses nothing.
@@ -1375,7 +1401,7 @@
       label: 'OpenRouter',
       base: 'https://openrouter.ai/api/v1',
       keyHint: 'sk-or-v1-…',
-      keyHelp: 'Free key from openrouter.ai/keys. Kept in this browser; sent only to openrouter.ai.',
+      keyHelp: 'Free key from openrouter.ai/keys.',
       defaultModel: 'openrouter/free',
       defaultLabel: 'Auto — routes to a free model',
       headers: function (key) { return { 'Authorization': 'Bearer ' + key, 'HTTP-Referer': location.origin, 'X-Title': 'Handpress' }; },
@@ -1392,7 +1418,7 @@
       label: 'opencode Zen',
       base: 'https://opencode.ai/zen/v1',
       keyHint: 'Zen key from opencode.ai/auth',
-      keyHelp: 'Zen key from opencode.ai/auth. Kept in this browser; sent only to opencode.ai.',
+      keyHelp: 'Zen key from opencode.ai/auth.',
       defaultModel: 'nemotron-3-ultra-free',
       defaultLabel: 'nemotron-3-ultra-free (free)',
       headers: function (key) { return { 'Authorization': 'Bearer ' + key }; },
@@ -1412,33 +1438,67 @@
     return !/^qwen3\.[56]/.test(id) && id !== 'qwen3.8-flash';
   }
 
+  // Settings in localStorage (ed-ai): { provider, models: {provider: model id}, sealed: {provider: encrypted key} }.
+  function aiRaw() { try { var s = JSON.parse(localStorage.getItem(AI_KEY)); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; } }
   function aiSettings() {
     var def = AI_PROVIDERS[AI_HOOKS.provider] ? AI_HOOKS.provider : 'openrouter';
-    var d = { provider: def, keys: {}, models: {} };
-    if (AI_HOOKS.model) d.models[def] = AI_HOOKS.model;        // the hook's default, until the owner picks one
-    try {
-      var s = JSON.parse(localStorage.getItem(AI_KEY));
-      if (!s || typeof s !== 'object') return d;
-      if (!s.provider && (s.key || s.model)) {                 // the earlier single-OpenRouter shape
-        d.keys.openrouter = s.key || '';
-        d.models.openrouter = s.model || '';
-      } else if (AI_PROVIDERS[s.provider]) {
-        d.provider = s.provider;
-        d.keys = s.keys || {};
-        d.models = Object.assign({}, d.models, s.models || {});
-      }
-    } catch (e) { /* none or unreadable */ }
+    var s = aiRaw(), d = { provider: AI_PROVIDERS[s.provider] ? s.provider : def, models: {}, sealed: s.sealed || {} };
+    if (AI_HOOKS.model) d.models[def] = AI_HOOKS.model;          // the hook's default, until the owner picks one
+    if (!s.provider && s.model) d.models.openrouter = s.model;  // the earliest single-OpenRouter shape
+    Object.assign(d.models, s.models || {});
     return d;
   }
   function writeAiSettings(s) {
-    try { localStorage.setItem(AI_KEY, JSON.stringify(s)); } catch (e) { /* private mode: settings last for this session only */ }
+    try { localStorage.setItem(AI_KEY, JSON.stringify({ provider: s.provider, models: s.models, sealed: s.sealed })); }
+    catch (e) { /* private mode: settings last for this session only */ }
+  }
+  function aiPatch(fn) { var s = aiSettings(); fn(s); writeAiSettings(s); }
+
+  // API keys are encrypted with an AES-GCM key made in this browser and kept in IndexedDB as a
+  // non-extractable CryptoKey: the editor can use it, but no script can read it out. A copy of
+  // localStorage (a synced profile, a backup, a malicious extension reading storage, a screenshot
+  // of dev tools) holds only ciphertext, useless anywhere else. Script running on this page could
+  // still decrypt, which no in-browser scheme can prevent.
+  var vault = null, aiMemKeys = {};                   // aiMemKeys: when this browser cannot encrypt (no https)
+  function aiVault() {
+    return vault || (vault = idb('readonly', function (st) { return st.get('k'); }, 'ed-ai-vault').then(function (k) {
+      return k || crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(function (nk) {
+        return idb('readwrite', function (st) { st.put(nk, 'k'); }, 'ed-ai-vault').then(function () { return nk; });
+      });
+    }));
+  }
+  async function aiSeal(text) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, await aiVault(), new TextEncoder().encode(text)));
+    var all = new Uint8Array(12 + ct.length); all.set(iv); all.set(ct, 12);
+    return btoa(String.fromCharCode.apply(null, all));
+  }
+  async function aiUnseal(b64) {
+    if (!b64) return '';
+    try {
+      var all = Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); });
+      return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, await aiVault(), all.slice(12)));
+    } catch (e) { return ''; }                         // site data cleared: the key has to be pasted again
+  }
+  async function aiGetKey(pid) { return aiMemKeys[pid] || aiUnseal(aiSettings().sealed[pid]); }
+  async function aiSetKey(pid, key) {
+    var sealed = '';
+    try { if (key) sealed = await aiSeal(key); delete aiMemKeys[pid]; }
+    catch (e) { aiMemKeys[pid] = key; }               // ponytail: kept for this page load only, never stored in plain text
+    aiPatch(function (s) { if (sealed) s.sealed[pid] = sealed; else delete s.sealed[pid]; });
+  }
+  async function aiMigrate() {                         // earlier versions kept keys in plain text: seal them
+    var raw = aiRaw(), plain = raw.keys || (raw.key ? { openrouter: raw.key } : null);
+    if (!plain) return;
+    for (var pid in plain) if (plain[pid] && AI_PROVIDERS[pid]) await aiSetKey(pid, plain[pid]);
+    aiPatch(function () {});                           // rewrite without the plain-text fields
   }
 
   async function aiAsk(system, user, opts) {
     opts = opts || {};
     var s = aiSettings(), p = AI_PROVIDERS[s.provider] || AI_PROVIDERS.openrouter;
-    var key = (s.keys || {})[s.provider] || '', model = (s.models || {})[s.provider] || p.defaultModel;
-    if (!key) throw new Error('No ' + p.label + ' API key yet. Add one under AI → Settings (' + p.keyHint + ').');
+    var key = await aiGetKey(s.provider), model = s.models[s.provider] || p.defaultModel;
+    if (!key) throw new Error('No ' + p.label + ' API key yet. Add one under “Model & key” (' + p.keyHint + ').');
     var body = {
       model: model,
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -1460,7 +1520,7 @@
     if (!r.ok) {
       var m = (d.error && d.error.message) || d.message || 'Error ' + r.status;
       if (r.status === 401) throw new Error(p.label + ' rejected the API key. Copy it again (' + p.keyHint + ').');
-      if (r.status === 402) throw new Error('This ' + p.label + ' model needs credits. Pick a free model under AI → Settings.');
+      if (r.status === 402) throw new Error('This ' + p.label + ' model needs credits. Pick a free model under “Model & key”.');
       if (r.status === 429) throw new Error('Rate limited on “' + model + '” (' + p.label + '). Wait a moment, or pick another model.');
       throw new Error(p.label + ': ' + m);
     }
@@ -1471,7 +1531,7 @@
       if (!jm) throw new Error('Expected JSON from the model. Try again, or pick another model.');
       try { return JSON.parse(jm[0]); } catch (e) { throw new Error('The model’s JSON was not valid. Try again.'); }
     }
-    return String(content);
+    return String(content).replace(/^\s*```(?:html)?\s*|\s*```\s*$/g, '');
   }
 
   // The provider's models, with its default pinned first; free ones come first in the rest.
@@ -1483,68 +1543,63 @@
       .concat(list.filter(function (m) { return m[0] !== p.defaultModel; })));
   }
 
-  // The site's design as the AI sees it: tokens, class vocabulary, section shapes, voice.
-  // Built once per page load; capped so free-model context stays cheap.
+  // What the AI knows about the site: its CSS (tokens, element and class rules used here), the
+  // page's HTML outline, voice. Rebuilt after each AI edit; capped so free-model context stays cheap.
   function buildDesignContext() {
     if (aiCtx) return aiCtx;
-    var cssAll = '';
+    var used = {}, rules = [];
+    $$('[class]').forEach(function (n) {
+      if (n.closest('[data-ed-ui]')) return;
+      String(n.getAttribute('class') || '').split(/\s+/).forEach(function (c) { if (c && !/^ed-/.test(c)) used[c] = 1; });
+    });
+    var BASIC = /(^|[\s,>+~(])(:root|html|body|main|section|article|header|footer|nav|h[1-6]|p|a|ul|ol|li|img|figure|blockquote|button|table)\b/;
+    function wanted(t) {
+      var sel = t.split('{')[0];
+      if (/\.ed-|\[data-ed|\.ed-on/.test(sel)) return false;     // the editor's own chrome
+      return BASIC.test(sel) || (sel.match(/\.[a-zA-Z][\w-]*/g) || []).some(function (c) { return used[c.slice(1)]; });
+    }
     Array.prototype.forEach.call(document.styleSheets, function (ss) {
       if (ss.href && ss.href.indexOf(location.origin) !== 0) return;   // same-origin only
-      var owner = ss.ownerNode;
-      if (owner && owner.closest && owner.closest('[data-ed-ui]')) return;   // skip the editor's own chrome CSS
-      try { Array.prototype.forEach.call(ss.cssRules || [], function (r) { cssAll += r.cssText + '\n'; }); }
+      if (ss.ownerNode && ss.ownerNode.closest && ss.ownerNode.closest('[data-ed-ui]')) return;
+      try { Array.prototype.forEach.call(ss.cssRules || [], function (r) { var t = r.cssText.replace(/\s+/g, ' '); if (wanted(t)) rules.push(t.slice(0, 400)); }); }
       catch (e) { /* unreadable sheet */ }
     });
-    var tokens = [], root = /:root\s*\{([^}]*)\}/.exec(cssAll);
-    if (root) tokens = (root[1].match(/--[a-zA-Z0-9-]+\s*:\s*[^;}]+/g) || []).slice(0, 24);
-    var bodyFont = (cssAll.match(/\bbody\s*\{[^}]*\}/) || [''])[0].replace(/\s+/g, ' ').slice(0, 220);
-    var used = {};
-    $$('[class]').forEach(function (n) {
-      String(n.getAttribute('class') || '').split(/\s+/).forEach(function (c) { if (c) used[c] = 1; });
-    });
-    var classRules = [];
-    cssAll.split('\n').forEach(function (line) {
-      if (classRules.length >= 40 || !line) return;
-      var m = line.match(/\.[a-zA-Z][\w-]*/g);
-      if (m && m.some(function (c) { return used[c.slice(1)]; })) classRules.push(line.trim().slice(0, 300));
-    });
-    var patterns = [];
-    if (src) $$('[data-e-list]', src).forEach(function (list) {
-      if (patterns.length >= 4) return;
-      var first = list.firstElementChild;
-      if (first) patterns.push(first.outerHTML.replace(/\sdata-e(?:-list)?="[^"]*"/g, '').slice(0, 500));
-    });
-    var voice = '';
-    try {
-      var clone = document.body.cloneNode(true);
-      $$('[data-ed-ui], script, style, dialog', clone).forEach(function (n) { n.remove(); });
-      voice = (clone.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
-    } catch (e) { /* nothing to learn from */ }
+    var outline = '';
+    if (src) {
+      var b = src.body.cloneNode(true);
+      $$('script, style, noscript, template', b).forEach(function (n) { n.remove(); });
+      $$('svg', b).forEach(function (n) { n.textContent = ''; });
+      (function trim(n) {
+        Array.prototype.slice.call(n.childNodes).forEach(function (c) {
+          if (c.nodeType === 3) c.data = c.data.replace(/\s+/g, ' ').slice(0, 80);
+          else if (c.nodeType === 1) { c.removeAttribute('data-e'); c.removeAttribute('data-e-list'); trim(c); }
+        });
+      })(b);
+      outline = b.innerHTML.replace(/>\s+</g, '><').slice(0, 6000);
+    }
     aiCtx = [
-      'SITE DESIGN CONTEXT — write content that fits this site exactly.',
-      'Design tokens (CSS custom properties):\n' + (tokens.join('\n') || '(none found)'),
-      'Body typography:\n' + (bodyFont || '(default)'),
-      'CSS classes used on this page — reuse these, never invent new ones:\n' + (classRules.join('\n') || '(none found)'),
-      'Section patterns already on the page (copy their class usage and hierarchy):\n' + (patterns.join('\n---\n') || '(none found)'),
-      BLOCKS.length ? 'Block templates the site offers for new content:\n' + BLOCKS.map(function (b) { return b[0] + ': ' + b[1]; }).join('\n') : '',
-      FONTS.length ? 'Fonts offered in the Style menu: ' + FONTS.map(function (f) { return f[0]; }).join(', ') : '',
+      'You are an expert front-end developer writing HTML for a hand-built static website. You know semantic HTML5 and CSS well.',
+      'SITE CSS (the page already loads it; reuse its classes and custom properties):\n' + (rules.join('\n').slice(0, 7000) || '(no stylesheet: a blank site)'),
+      'CURRENT PAGE HTML (outline, text shortened):\n' + (outline || '(empty)'),
+      BLOCKS.length ? 'Block templates the site offers:\n' + BLOCKS.map(function (b) { return b[0] + ': ' + b[1]; }).join('\n') : '',
       GUIDE[PAGE] && GUIDE[PAGE].length ? 'What belongs on this page: ' + GUIDE[PAGE].map(function (t) { return t[0]; }).join(' ') : '',
       AI_HOOKS.context ? 'Brand voice notes from the site author: ' + AI_HOOKS.context : '',
-      'Current page copy (match this voice and length):\n' + (voice || '(none)'),
       'RULES\n' + [
         '- Match the voice, tone and length of the existing copy.',
-        '- Reuse only the classes listed above; keep the same heading/paragraph hierarchy.',
+        '- Reuse the classes and section shapes above. Where no class fits (e.g. a blank page), use inline style="" on containers, built on the CSS custom properties (var(--…)) when there are any; keep it responsive (flex/grid with wrap, max-width, no fixed pixel widths).',
+        '- Semantic HTML: section, h2/h3, p, ul, figure, a. Images: real https URLs or the site’s own, always with alt.',
         '- For new content: mark each editable text element data-e="t0" (list items data-e="i0"); the editor assigns final keys.',
-        '- No <script>, <style>, <iframe>, inline event handlers, or javascript: links.',
+        '- No <script>, <style>, <iframe>, forms, inline event handlers, or javascript: links.',
         '- Return only what was asked: no preamble, no explanations, no markdown fences.'
       ].join('\n')
-    ].filter(Boolean).join('\n\n').slice(0, 8000);
+    ].filter(Boolean).join('\n\n');
     return aiCtx;
   }
 
-  // Model output before it touches the page: dangerous tags/attributes out. Section output
-  // keeps its data-e keys — insertAfter's rekey() numbers them fresh; without keys the inserted
-  // block would not be editable, so a fallback keys text leaves when the model forgot them.
+  // Model output before it touches the page: dangerous tags/attributes out. 'section' output keeps
+  // its data-e keys (insertAt's rekey() numbers them fresh) and every top-level element gets one, so
+  // whatever the AI adds can be selected, moved and edited; a fallback keys text leaves when the
+  // model forgot them. 'text' unwraps a single wrapper the model echoed; 'clean' only cleans.
   var AI_DROP = /^(script|style|iframe|object|embed|form|input|button|textarea|select|meta|link|base|noscript)$/i;
   var AI_INLINE = /^(A|EM|STRONG|B|I|BR|SPAN|CODE|SMALL|SUP|SUB|MARK)$/;
   function aiKeyFallback(root) {
@@ -1558,7 +1613,6 @@
       n.setAttribute('data-e', 't0');
       keyed.push(n);
     });
-    if (!root.querySelector('[data-e]')) root.setAttribute('data-e', 't0');                   // e.g. an image-only block
   }
   function aiSanitize(html, mode) {
     var wrap = src.createElement('div');
@@ -1567,16 +1621,19 @@
       if (AI_DROP.test(n.tagName)) { n.remove(); return; }
       Array.prototype.slice.call(n.attributes).forEach(function (a) {
         if (/^on/i.test(a.name)) n.removeAttribute(a.name);
-        else if ((a.name === 'href' || a.name === 'src' || a.name === 'action') && !safeUrl(a.value)) n.removeAttribute(a.name);
+        else if (/^(href|src|action|formaction|xlink:href)$/i.test(a.name) && !safeUrl(a.value)) n.removeAttribute(a.name);
       });
-      if (mode === 'section') n.removeAttribute('data-ed-ui');
+      n.removeAttribute('data-ed-ui');
+      n.removeAttribute('contenteditable');
     });
     if (mode === 'text') {
       var kids = Array.prototype.slice.call(wrap.children);
-      if (kids.length === 1 && /^(P|DIV|H1|H2|H3|H4|H5|H6|SECTION|ARTICLE|BLOCKQUOTE|LI|UL|OL)$/.test(kids[0].tagName)) return kids[0].innerHTML;
-      return wrap.innerHTML;
+      if (kids.length === 1 && /^(P|DIV|H1|H2|H3|H4|H5|H6|SECTION|ARTICLE|BLOCKQUOTE|LI|UL|OL)$/.test(kids[0].tagName) &&
+        !kids[0].hasAttribute('data-e') && !wrap.textContent.replace(kids[0].textContent, '').trim()) return kids[0].innerHTML;
     }
+    if (mode !== 'section') return wrap.innerHTML;
     aiKeyFallback(wrap);
+    Array.prototype.forEach.call(wrap.children, function (c) { if (!c.hasAttribute('data-e')) c.setAttribute('data-e', 'i0'); });
     return wrap.innerHTML.trim();
   }
   // An in-place edit must not add, drop or rename the data-e keys inside a block: drafts and ops
@@ -1588,192 +1645,287 @@
     return keys(el) === keys(probe);
   }
 
-  // Where the AI drawer inserts new blocks: after the last editable (non-global) block.
+  // Where the AI works when opened from the bar: an empty canvas, else the last editable block.
   function aiAnchor() {
     if (!src) return null;
     var all = $$('[data-e]', src.body).filter(function (n) { return !/^g/.test(keyOf(n) || ''); });
     return all[all.length - 1] || null;
   }
+  function aiDefaultTarget() {
+    var c = $('[data-e-canvas]'), a = aiAnchor();
+    if (c && !c.children.length) return c;
+    return (a && liveEl(keyOf(a))) || c;
+  }
+  function describe(el) {
+    var cls = String(el.getAttribute('class') || '').split(/\s+/).filter(function (c) { return c && !/^ed-/.test(c); })[0];
+    var text = el.textContent.replace(/\s+/g, ' ').trim();
+    return '<' + el.tagName.toLowerCase() + (cls ? '.' + cls : '') + '>' +
+      (el.hasAttribute('data-e-canvas') ? ' page canvas' + (el.children.length ? '' : ' (empty)') : text ? ' “' + text.slice(0, 48) + (text.length > 48 ? '…' : '') + '”' : '');
+  }
+  function crumbs(el) {                                 // where it sits: "main > section.features > div.cards"
+    var out = [];
+    for (var n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+      var c = String(n.getAttribute('class') || '').split(/\s+/).filter(function (x) { return x && !/^ed-/.test(x); })[0];
+      out.unshift(n.tagName.toLowerCase() + (c ? '.' + c : ''));
+    }
+    return out.join(' > ') || 'body';
+  }
+  function stopPicking() { picking = null; document.documentElement.classList.remove('ed-picking'); }
 
-  function openAiDrawer() {
-    var s = aiSettings();
-    var pid = AI_PROVIDERS[s.provider] ? s.provider : 'openrouter';
-    var p = AI_PROVIDERS[pid];
-    var keyIn = h('input', { type: 'password', value: s.keys[pid] || '', placeholder: p.keyHint, autocomplete: 'off', spellcheck: false });
-    var provSel = h('select', { className: 'ed-select', 'data-ai': 'provider' }, Object.keys(AI_PROVIDERS).map(function (id) {
+  // The AI panel: one movable window for everything AI. It works on a target — the hovered block,
+  // one picked on the page, or the page's canvas — in one of four ways (AI_MODES), shows the result
+  // as a preview and as HTML that can be edited by hand, and applies it as one undoable edit.
+  var AI_MODES = [
+    ['edit', 'Rewrite its words (keep the layout)'],
+    ['replace', 'Redesign it (layout may change)'],
+    ['in', 'Build new content inside it'],
+    ['after', 'Add a new block after it']
+  ];
+  async function openAi(target, mode) {
+    syncUnits();
+    stopPicking();
+    if (aiPanel) aiPanel.remove();
+    await aiMigrate();
+    var t = target || aiDefaultTarget();
+    var s = aiSettings(), pid = s.provider, p = AI_PROVIDERS[pid];
+    var result = null, running = false;
+    var keyIn = h('input', { type: 'password', value: await aiGetKey(pid), placeholder: p.keyHint, autocomplete: 'off', spellcheck: false,
+      on: { change: function () { aiSetKey(pid, this.value.trim()); } } });
+    var provSel = h('select', { className: 'ed-select', 'data-ai': 'provider', on: { change: async function () {
+      await aiSetKey(pid, keyIn.value.trim());                 // keep what was typed before switching
+      var next = this.value;
+      aiPatch(function (x) { x.provider = next; });
+      openAi(t, modeSel.value);                                // redraw for the chosen provider
+    } } }, Object.keys(AI_PROVIDERS).map(function (id) {
       return h('option', { value: id, textContent: AI_PROVIDERS[id].label, selected: id === pid });
     }));
-    var modelSel = h('select', { className: 'ed-select', 'data-ai': 'model' });
-    var modelCustom = h('input', { placeholder: '…or type any model id' });
-    var note = h('p', { className: 'ed-note' });
-    var promptIn = h('textarea', { rows: 4, placeholder: 'What should the AI write? e.g. “a short intro paragraph about our sourdough workshop, warm and factual”' });
-    var resultBox = h('div', { className: 'ed-ai-preview' });
-    var resultHtml = null;
-    function currentModel() { return modelCustom.value.trim() || modelSel.value || p.defaultModel; }
-    function save() { s.provider = pid; s.keys[pid] = keyIn.value.trim(); s.models[pid] = currentModel(); writeAiSettings(s); }
-    provSel.addEventListener('change', function () {
-      s.keys[pid] = keyIn.value.trim();                        // keep what was typed before switching
-      s.models[pid] = currentModel();
-      s.provider = provSel.value;
-      writeAiSettings(s);
-      openAiDrawer();                                          // redraw for the chosen provider
-    });
-    keyIn.addEventListener('change', save);
-    modelSel.addEventListener('change', function () { modelCustom.value = ''; save(); });
-    modelCustom.addEventListener('change', function () {
-      var v = modelCustom.value.trim();
+    function setModel(v) { aiPatch(function (x) { x.models[pid] = v; }); }
+    var modelSel = h('select', { className: 'ed-select', 'data-ai': 'model', on: { change: function () { modelCustom.value = ''; setModel(this.value); } } });
+    var modelCustom = h('input', { placeholder: '…or type any model id', on: { change: function () {
+      var v = this.value.trim();
       if (!v) return;
       if (!$$('option', modelSel).some(function (o) { return o.value === v; })) modelSel.append(h('option', { value: v, textContent: v }));
       modelSel.value = v;
-      save();
-    });
+      setModel(v);
+    } } });
     var want = s.models[pid] || p.defaultModel;
     modelSel.append(h('option', { value: want, textContent: want }));
+    var note = h('p', { className: 'ed-note', role: 'status' });
     aiModels(pid).then(function (list) {
       modelSel.textContent = '';
-      var has = false;
-      list.forEach(function (m) {
-        var on = m[0] === want;
-        if (on) has = true;
-        modelSel.append(h('option', { value: m[0], textContent: m[1], selected: on }));
-      });
-      if (!has) modelSel.append(h('option', { value: want, textContent: want, selected: true }));
+      list.forEach(function (m) { modelSel.append(h('option', { value: m[0], textContent: m[1], selected: m[0] === want })); });
+      if (!list.some(function (m) { return m[0] === want; })) modelSel.append(h('option', { value: want, textContent: want, selected: true }));
     }).catch(function () {
-      note.textContent = 'Could not load the model list (offline, or the provider is blocked). The typed model id below still works.';
+      note.textContent = 'Could not load the model list (offline, or the provider is blocked). A typed model id still works.';
     });
-    function generate() {
-      save();
-      var inst = promptIn.value.trim();
-      if (!inst) { note.textContent = 'Describe what you want first.'; return; }
-      resultHtml = null;
-      resultBox.textContent = 'Writing…';
-      var anchor = aiAnchor();
-      note.textContent = '';
-      aiAsk(buildDesignContext(),
-        'Write ONE new HTML element (a single top-level element) for this page.\nInstruction: ' + inst +
-        '\nReturn JSON only, in the form {"html": "<element …>…</element>"}.\nMark editable text elements data-e="t0" (list items data-e="i0").' +
-        (anchor ? '\n\nIt will be inserted after this existing block, so match its shape:\n' + anchor.outerHTML.slice(0, 600) : ''),
-        { json: true, maxTokens: 900 })
-        .then(function (out) {
-          var html = aiSanitize(out && out.html, 'section');
-          if (!html) throw new Error('The model returned empty content. Try again.');
-          resultHtml = html;
-          resultBox.textContent = '';
-          resultBox.append(h('strong', { textContent: 'Preview: ' }),
-            h('div', { className: 'ed-ai-render', innerHTML: html }),
-            h('p', { className: 'ed-note', textContent: 'Apply inserts it after the last editable block on this page. For another spot, hover a block and use its AI button.' }));
-        })
-        .catch(function (e) { resultBox.textContent = ''; resultBox.append(h('p', { className: 'ed-note', textContent: e.message })); });
-    }
-    drawer('AI · write with ' + p.label, [
-      h('h3', { textContent: 'Settings' }),
-      h('label', { className: 'ed-field' }, [h('span', { textContent: 'AI provider' }), provSel,
-        h('small', { textContent: 'Both are OpenAI-compatible; each keeps its own key and model.' })]),
-      h('label', { className: 'ed-field' }, [h('span', { textContent: p.label + ' API key' }), keyIn, h('small', { textContent: p.keyHelp })]),
-      h('label', { className: 'ed-field' }, [h('span', { textContent: 'Model' }), modelSel, modelCustom,
-        h('small', { textContent: pid === 'openrouter'
-          ? 'openrouter/free picks a free model automatically. Free models have strict rate limits.'
-          : 'Models marked (free) cost nothing. Free models rotate, so refresh if one disappears.' })]),
-      note,
-      h('h3', { textContent: 'Write content' }),
-      h('label', { className: 'ed-field' }, [h('span', { textContent: 'What should it write?' }), promptIn]),
-      h('p', { className: 'ed-ai-run' }, [tool('Generate', 'Ask the AI to write a new block for this page', generate)]),
-      resultBox,
-      h('p', { className: 'ed-ai-run' }, [tool('Apply to page', 'Insert the generated block after the last editable block on this page', function () {
-        try {
-          if (!resultHtml) throw new Error('Generate something first.');
-          var anchor = aiAnchor();
-          if (!anchor) throw new Error('No editable block on this page to insert after.');
-          insertAfter(anchor, resultHtml);
-          refreshBar('AI block added — undoable like any other edit.');
-        } catch (e) { alert(e.message); }
-      })])
-    ]);
-  }
 
-  // Per-block AI: rewrite the content of an existing block in place, or write a new block below it.
-  function openAiFor(it) {
-    syncUnits();
-    var k = keyOf(it), s = srcEl(k);
-    if (!s) return;
-    var isText = kindOf(k) === 't';
-    var result = null, running = false;
-    var note = h('p', { className: 'ed-note', textContent: isText
-      ? 'The AI rewrites the words inside this block; its structure and style stay.'
-      : 'The AI rewrites the content inside this block, keeping its structure, classes and keys.' });
-    var custom = h('input', { placeholder: '…or type your own instruction' });
-    var choices = h('div', { className: 'ed-choices' });
-    var preview = h('div', { className: 'ed-ai-preview' });
-    var list = [
-      ['Rewrite', 'Rewrite the content of this block, keeping the same meaning and structure.'],
+    var targetLabel = h('code', { className: 'ed-ai-target' });
+    var modeSel = h('select', { className: 'ed-select', 'data-ai': 'mode', on: { change: function () { clearResult(); syncMode(); } } },
+      AI_MODES.map(function (m) { return h('option', { value: m[0], textContent: m[1] }); }));
+    var quick = h('div', { className: 'ed-choices ed-ai-quick' });
+    [['Rewrite', 'Rewrite the content of this block, keeping the same meaning and structure.'],
       ['Improve', 'Improve the content of this block: clearer and more engaging, same structure.'],
       ['Shorter', 'Make the content of this block noticeably shorter, keeping the key point.'],
       ['Longer', 'Expand the content of this block with a little more detail, same tone.']
-    ].concat(AI_HOOKS.actions || []);
-    function show(mode, html) {
-      result = { mode: mode, html: html };
-      preview.textContent = '';
-      preview.append(h('strong', { textContent: 'Preview: ' }), h('div', { className: 'ed-ai-render', innerHTML: html }));
-    }
-    function fail(e) {
-      result = null;
-      preview.textContent = '';
-      preview.append(h('p', { className: 'ed-note', textContent: e.message }));
-    }
-    var busy = function (on) { running = on; if (on) { result = null; preview.textContent = 'Writing…'; } };
-    function runEdit(instruction) {                            // change this block, in place
-      if (running) return;
-      busy(true);
-      aiAsk(buildDesignContext(),
-        'Rewrite the content INSIDE the HTML element below. Change only the visible words: keep the element and its child elements, the same classes, and every data-e attribute exactly as it appears.\nInstruction: ' + instruction +
-        '\nReturn only the new inner HTML (nothing wrapped around the whole element, no markdown fences).\n\nElement:\n' + s.outerHTML,
-        { maxTokens: 900 })
-        .then(function (out) {
-          var html = aiSanitize(out, 'text');
-          if (!html || !html.trim()) throw new Error('The model returned empty content. Try again.');
-          if (!aiSameKeys(s, html)) throw new Error('That would have changed the block’s structure, so it was left alone. Try again, or use “Write a new block below”.');
-          show('edit', html);
-        })
-        .catch(fail)
-        .then(function () { busy(false); });
-    }
-    function runAfter() {                                      // add a new block after this one
-      if (running) return;
-      busy(true);
-      aiAsk(buildDesignContext(),
-        'Write ONE new HTML element (a single top-level element) to insert after the block below on this page.\nInstruction: Write a new block that fits here.' +
-        '\nReturn JSON only, in the form {"html": "<element …>…</element>"}.\nMark editable text elements data-e="t0" (list items data-e="i0").\n\nThe block it goes after:\n' + s.outerHTML.slice(0, 800),
-        { json: true, maxTokens: 900 })
-        .then(function (out) {
-          var html = aiSanitize(out && out.html, 'section');
-          if (!html) throw new Error('The model returned empty content. Try again.');
-          show('after', html);
-        })
-        .catch(fail)
-        .then(function () { busy(false); });
-    }
-    list.forEach(function (a) {
-      choices.append(h('button', { type: 'button', className: 'ed-choice', on: { click: function () { runEdit(a[1]); } } },
-        [h('strong', { textContent: a[0] }), h('small', { textContent: a[1] })]));
+    ].concat(AI_HOOKS.actions || []).forEach(function (a) {
+      quick.append(h('button', { type: 'button', className: 'ed-choice', title: a[1], on: { click: function () { generate(a[1]); } } }, [h('strong', { textContent: a[0] })]));
     });
-    modal('AI · ' + (isText ? 'this text' : 'this block'), [
-      note,
-      h('h3', { textContent: 'Rewrite this block' }),
-      choices,
-      h('div', { className: 'ed-field' }, [h('span', { textContent: 'Custom instruction' }), custom]),
-      h('p', { className: 'ed-ai-run' }, [tool('Rewrite', 'Run the custom instruction on this block', function () {
-        if (custom.value.trim()) runEdit(custom.value.trim());
-      })]),
-      h('h3', { textContent: 'Or write new content' }),
-      h('p', { className: 'ed-ai-run' }, [tool('Write a new block below', 'Ask the AI to write a new block to insert after this one', runAfter)]),
-      preview
-    ], function () {
-      if (!result) throw new Error('Nothing generated yet — run an action first.');
-      if (result.mode === 'after') insertAfter(it, result.html);
-      else commit({ t: 'text', id: 'text:' + k, k: k, html: result.html });
-      refreshBar('AI edit applied — undoable like any other edit.');
+    var promptIn = h('textarea', { rows: 3, 'data-ai': 'prompt', on: { keydown: function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); generate(); }
+    } } });
+    var preview = h('div', { className: 'ed-ai-render', hidden: true });
+    var htmlIn = h('textarea', { rows: 7, 'data-ai': 'html', spellcheck: false, placeholder: 'The HTML that Apply puts on the page. Edit it by hand if you like.',
+      on: { input: function () { setResult(this.value, true); } } });
+
+    function setTarget(el) {
+      if (!el || !srcEl(keyOf(el))) { note.textContent = 'Pick a block on the page.'; return; }
+      $$('.ed-ai-on').forEach(function (n) { n.classList.remove('ed-ai-on'); });
+      t = el;
+      t.classList.add('ed-ai-on');
+      targetLabel.textContent = describe(t);
+      var k = kindOf(keyOf(t)), empty = !t.children.length && !t.textContent.trim();
+      $('option[value=edit]', modeSel).disabled = k === 'm' || empty;
+      $('option[value=in]', modeSel).disabled = k === 't' || k === 'm';
+      clearResult();
+      syncMode();
+    }
+    function syncMode() {
+      if (modeSel.selectedOptions[0].disabled) modeSel.value = $$('option', modeSel).filter(function (o) { return !o.disabled; })[0].value;
+      var m = modeSel.value;
+      quick.hidden = m !== 'edit';
+      promptIn.placeholder = {
+        edit: 'Optional: how to rewrite it, e.g. “friendlier, mention the Saturday market”',
+        replace: 'How should it look and read? e.g. “a two-column layout: photo left, text and a button right”',
+        in: t && t.hasAttribute('data-e-canvas') && !t.children.length
+          ? 'Describe the page, or its first section, e.g. “a hero for a pottery studio: big headline, one line, a button to book a class”'
+          : 'What to build here, e.g. “three pricing cards” or “an FAQ with four questions”',
+        after: 'What comes next, e.g. “a short testimonial from a customer”'
+      }[m];
+    }
+    function clearResult() { result = null; htmlIn.value = ''; preview.hidden = true; }
+    function setResult(html, typed) {
+      result = html;
+      if (!typed) htmlIn.value = html;
+      preview.innerHTML = aiSanitize(html, modeSel.value === 'edit' ? 'clean' : 'section');
+      $$('[data-e]', preview).forEach(function (n) { n.removeAttribute('data-e'); });   // never mistaken for the real blocks
+      preview.hidden = !html.trim();
+    }
+    async function generate(instruction) {
+      if (running) return;
+      var m = modeSel.value, sk = t && srcEl(keyOf(t));
+      if (!sk) { note.textContent = 'That block is gone. Pick another.'; return; }
+      var inst = instruction || promptIn.value.trim() || (m === 'edit' ? 'Rewrite the content, keeping the same meaning.' : '');
+      if (!inst) { note.textContent = 'Describe what you want first.'; promptIn.focus(); return; }
+      running = true;
+      clearResult();
+      note.textContent = 'Writing…';
+      await aiSetKey(pid, keyIn.value.trim());
+      setModel(modelCustom.value.trim() || modelSel.value || p.defaultModel);
+      var where = '\nIt sits at: ' + crumbs(t) + '\n\nThe element:\n' + sk.outerHTML.slice(0, 6000);
+      var json = '\nReturn JSON only, in the form {"html": "…"}. Mark editable text elements data-e="t0" (list items data-e="i0").';
+      var ask = {
+        edit: 'Rewrite the content INSIDE the HTML element below. Change only the visible words: keep the element and its child elements, the same classes, and every data-e attribute exactly as it appears.\nInstruction: ' + inst +
+          '\nReturn only the new inner HTML (nothing wrapped around the whole element, no markdown fences).' + where,
+        replace: 'Redesign the HTML element below. Write its complete replacement: one or more top-level elements that take its place, same purpose unless told otherwise.\nInstruction: ' + inst + json + where,
+        in: 'Write new HTML to put INSIDE the element below, after what it already contains (if anything): one or more top-level elements that are direct children of it.\nInstruction: ' + inst + json + where,
+        after: 'Write new HTML to insert right AFTER the element below, as its sibling: one or more top-level elements that fit there.\nInstruction: ' + inst + json + where
+      }[m];
+      try {
+        var out = await aiAsk(buildDesignContext(), ask, { json: m !== 'edit', maxTokens: m === 'edit' ? 1200 : 4000 });
+        var html = m === 'edit' ? aiSanitize(out, 'text') : aiSanitize(out && out.html, 'section');
+        if (!html || !html.trim()) throw new Error('The model returned empty content. Try again.');
+        if (m === 'edit' && !aiSameKeys(sk, html)) throw new Error('That would have changed the block’s structure, so it was left alone. Try again, or choose “Redesign it”.');
+        setResult(html);
+        note.textContent = 'Check the preview (edit the HTML below if you like), then Apply.';
+      } catch (e) {
+        note.textContent = e.message;
+      }
+      running = false;
+    }
+    function handEdit() {                                     // the block's own HTML, to change by hand
+      var sk = t && srcEl(keyOf(t));
+      if (!sk) return;
+      if (modeSel.value !== 'edit') modeSel.value = 'replace';
+      syncMode();
+      setResult(modeSel.value === 'edit' ? sk.innerHTML : sk.outerHTML);
+      note.textContent = 'Edit the HTML, watch the preview, then Apply.';
+      htmlIn.focus();
+    }
+    function applyResult() {
+      try {
+        if (result == null || !result.trim()) throw new Error('Generate something first (or use Edit HTML).');
+        var m = modeSel.value, k = keyOf(t), sk = srcEl(k);
+        if (!sk) throw new Error('That block is gone. Pick another.');
+        if (m === 'edit') {
+          var html = aiSanitize(result, 'clean');
+          if (!aiSameKeys(sk, html)) throw new Error('That changes which parts are editable. Choose “Redesign it” to change the layout.');
+          commit({ t: 'text', id: 'text:' + k, k: k, html: html });
+        } else {
+          var live = insertAt(t, aiSanitize(result, 'section'), m);
+          if (m === 'replace' && live) setTarget(live);
+        }
+        aiCtx = null;                                         // the page changed: rebuild what the AI knows
+        clearResult();
+        note.textContent = 'Applied — Undo takes it back. Carry on, or pick another spot.';
+        refreshBar('AI edit applied — undoable like any other edit.');
+      } catch (e) { note.textContent = e.message; }
+    }
+
+    var head = h('div', { className: 'ed-ai__head', title: 'Drag to move' }, [
+      h('h2', { textContent: 'AI · ' + p.label }),
+      h('button', { type: 'button', className: 'ed-btn', textContent: 'Close', on: { click: close } })
+    ]);
+    var panel = aiPanel = h('div', { className: 'ed-ai', 'data-ed-ui': '', role: 'dialog', 'aria-label': 'AI assistant' }, [
+      head,
+      h('div', { className: 'ed-ai__body' }, [
+        h('details', { className: 'ed-ai-settings', open: !keyIn.value }, [
+          h('summary', { textContent: 'Model & key' }),
+          h('label', { className: 'ed-field' }, [h('span', { textContent: 'AI provider' }), provSel]),
+          h('label', { className: 'ed-field' }, [h('span', { textContent: p.label + ' API key' }), keyIn,
+            h('small', { textContent: p.keyHelp + ' Stored encrypted in this browser only; sent to ' + p.label + ' and nowhere else.' })]),
+          h('label', { className: 'ed-field' }, [h('span', { textContent: 'Model' }), modelSel, modelCustom,
+            h('small', { textContent: pid === 'openrouter'
+              ? 'openrouter/free picks a free model automatically. Free models have strict rate limits.'
+              : 'Models marked (free) cost nothing. Free models rotate, so refresh if one disappears.' })])
+        ]),
+        h('div', { className: 'ed-field' }, [h('span', { textContent: 'Working on' }), targetLabel,
+          h('p', { className: 'ed-ai-run' }, [
+            tool('Pick on page', 'Click any block on the page — a section, a card, a heading, the empty canvas', function () {
+              picking = setTarget;
+              document.documentElement.classList.add('ed-picking');
+              note.textContent = 'Click a block on the page (Esc to cancel).';
+            }),
+            tool('⤴ Bigger', 'The block around this one (e.g. the whole card or section)', function () {
+              var up = t && t.parentElement && t.parentElement.closest('[data-e]');
+              if (up && srcEl(keyOf(up))) setTarget(up); else note.textContent = 'Nothing editable around this.';
+            }),
+            tool('Edit HTML', 'Change this block’s HTML by hand', handEdit)
+          ])]),
+        h('label', { className: 'ed-field' }, [h('span', { textContent: 'What to do' }), modeSel]),
+        quick,
+        h('label', { className: 'ed-field' }, [h('span', { textContent: 'Instruction' }), promptIn]),
+        h('p', { className: 'ed-ai-run' }, [tool('Generate', 'Ask the AI (⌘/Ctrl+Enter)', function () { generate(); })]),
+        note,
+        preview,
+        h('label', { className: 'ed-field' }, [h('span', { textContent: 'HTML' }), htmlIn]),
+        h('p', { className: 'ed-ai-run' }, [h('button', { type: 'button', className: 'ed-btn ed-btn--gold', textContent: 'Apply', on: { click: applyResult } })])
+      ])
+    ]);
+    function close() {
+      stopPicking();
+      $$('.ed-ai-on').forEach(function (n) { n.classList.remove('ed-ai-on'); });
+      panel.remove();
+      if (aiPanel === panel) aiPanel = null;
+    }
+    // Drag by the title bar; the position is kept for the next time it opens.
+    head.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('button')) return;
+      var r = panel.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      head.setPointerCapture(e.pointerId);
+      function mv(ev) {
+        aiPos = [Math.max(0, Math.min(ev.clientX - dx, innerWidth - 80)), Math.max(0, Math.min(ev.clientY - dy, innerHeight - 40))];
+        place();
+      }
+      function up() { head.removeEventListener('pointermove', mv); head.removeEventListener('pointerup', up); }
+      head.addEventListener('pointermove', mv);
+      head.addEventListener('pointerup', up);
     });
+    function place() { if (aiPos) { panel.style.left = aiPos[0] + 'px'; panel.style.top = aiPos[1] + 'px'; panel.style.right = panel.style.bottom = 'auto'; } }
+    place();
+    document.body.append(panel);
+    if (mode) modeSel.value = mode;
+    else if (t && t.hasAttribute('data-e-canvas')) modeSel.value = 'in';
+    if (t) setTarget(t); else note.textContent = 'Pick a block on the page to work on.';
+    (keyIn.value ? promptIn : keyIn).focus();
   }
+
+  // A new, empty page: this page's <head> and shared blocks (header, footer) around an empty canvas
+  // that the AI (or + / paste) fills. Saved at once, so it opens and edits like any other page.
+  async function newPage() {
+    var name = (prompt('Name of the new page, e.g. “Workshops”. Its address becomes /workshops.') || '').trim();
+    if (!name) return;
+    var file = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '.html';
+    if (file === '.html' || file === 'admin.html' || PAGES.indexOf(file) >= 0) return alert('“' + file + '” is taken. Pick another name.');
+    var d = parseHtml(serialize(src)), keep = GLOBAL_BLOCKS.join(',');
+    Array.prototype.slice.call(d.body.children).forEach(function (n) {
+      if (n.tagName !== 'SCRIPT' && !(keep && n.matches(keep))) n.remove();
+    });
+    var main = d.createElement('main');
+    main.setAttribute('data-e', 'i1'); main.setAttribute('data-e-list', ''); main.setAttribute('data-e-canvas', '');
+    var top = d.body.querySelector(':scope > header');
+    if (top) top.after(main); else d.body.prepend(main);
+    d.title = name;
+    $$('meta[name=description], meta[property="og:description"], meta[property="og:url"]', d).forEach(function (m) { m.remove(); });
+    $$('meta[property="og:title"]', d).forEach(function (m) { m.setAttribute('content', name); });
+    fixNav(d, file);
+    var html = serialize(d);
+    refreshBar('Creating ' + file + '…');
+    try { await api('save', { files: [{ path: file, content: html }], message: 'New page ' + file }); }
+    catch (e) { refreshBar(); return alert('Could not create the page.\n\n' + e.message); }
+    try { localStorage.setItem(PAGES_KEY, JSON.stringify(myPages().concat(file))); } catch (e) { /* picker just won't list it */ }
+    waitForPublish(file, html, 'Created ' + file + '. It opens by itself when it’s live — build it with AI from the empty canvas.', servedUrl(file));
+  }
+  function myPages() { try { return JSON.parse(localStorage.getItem(PAGES_KEY)) || []; } catch (e) { return []; } }
 
   /* -------------------------------------------------------------- styles */
   var css = [
@@ -1839,10 +1991,24 @@
     '.ed-data details{border-left:2px solid var(--ed-line);padding-left:10px;margin:6px 0}',
     '.ed-data summary{cursor:pointer;font-weight:600;padding:4px 0}',
     '.ed-row{position:relative;padding-top:4px}.ed-row__tools{float:right;display:flex;gap:2px}.ed-row__tools .ed-btn{padding:1px 6px;font-size:12px}',
-    '.ed-ai-run{display:flex;gap:6px;align-items:center;margin:0 0 8px}',
-    '.ed-ai-preview{margin-top:10px}',
-    '.ed-ai-render{border:1px solid var(--ed-line);border-radius:8px;padding:10px;background:#fff;margin:6px 0;max-height:240px;overflow:auto}',
-    '@media (max-width:700px){body{padding-bottom:170px}.ed-status{order:9;flex-basis:100%}.ed-end{margin-left:0}.ed-drawer{bottom:0}}'
+    '.ed-ai-run{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px}',
+    '.ed-ai-render{border:1px solid var(--ed-line);border-radius:8px;padding:10px;background:#fff;margin:6px 0 12px;max-height:260px;overflow:auto}',
+    '.ed-ai{position:fixed;margin:0;padding:0;box-sizing:border-box;right:16px;bottom:72px;z-index:2147483002;width:min(440px,calc(100vw - 16px));max-height:calc(100vh - 90px);display:flex;flex-direction:column;background:var(--ed-paper);color:var(--ed-ink);font:14px/1.4 system-ui,sans-serif;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.35)}',
+    '.ed-ai__head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ed-line);cursor:move;touch-action:none;user-select:none}',
+    '.ed-ai__head h2{font:600 15px system-ui,sans-serif;margin:0}',
+    '.ed-ai__body{overflow:auto;padding:12px 14px}',
+    '.ed-ai .ed-btn{color:var(--ed-ink);border-color:var(--ed-line);background:#fff}.ed-ai .ed-btn--gold{background:var(--ed-gold);border-color:var(--ed-gold)}',
+    '.ed-ai .ed-select{width:100%;margin-bottom:4px}',
+    '.ed-ai textarea[data-ai=html]{font:12px/1.45 ui-monospace,monospace}',
+    '.ed-ai-settings{margin:0 0 12px;border:1px solid var(--ed-line);border-radius:8px;padding:6px 10px}.ed-ai-settings summary{cursor:pointer;font-weight:600}',
+    '.ed-ai-target{display:block;font:12px ui-monospace,monospace;background:#fff;border:1px solid var(--ed-line);border-radius:6px;padding:5px 7px;overflow-wrap:anywhere}',
+    '.ed-ai-quick{grid-template-columns:repeat(auto-fill,minmax(90px,1fr));margin:0 0 12px}',
+    '.ed-on .ed-ai-on{outline:2px solid #3a7bd5!important;outline-offset:3px}',
+    '.ed-ai [hidden]{display:none!important}',
+    '.ed-picking,.ed-picking *{cursor:crosshair!important}',
+    '.ed-on [data-e-canvas]:empty{display:grid;place-items:center;min-height:55vh;margin:16px;border:2px dashed var(--ed-gold);border-radius:12px;cursor:pointer;background:rgba(255,236,190,.15)}',
+    '.ed-on [data-e-canvas]:empty::before{content:"Empty canvas \\2014  click to build this page with AI";font:16px system-ui,sans-serif;color:#8a6420}',
+    '@media (max-width:700px){body{padding-bottom:170px}.ed-status{order:9;flex-basis:100%}.ed-end{margin-left:0}.ed-drawer{bottom:0}.ed-ai{left:8px;right:8px;bottom:8px;width:auto;max-height:70vh}}'
   ].join('\n');
   document.head.append(h('style', { 'data-ed-ui': '', textContent: css }));
 

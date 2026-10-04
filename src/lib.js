@@ -35,10 +35,13 @@ export const site = (cfg = {}) => ({
   dataFiles: cfg.dataFiles || {},
   uploadDir: (cfg.uploadDir || 'uploads').replace(/^\/|\/$/g, ''),
   globalBlocks: cfg.globalBlocks || [],
-  forceVisible: cfg.forceVisible || ''
+  forceVisible: cfg.forceVisible || '',
+  newPages: !!cfg.newPages
 });
 
-export const isPage = (p, cfg) => site(cfg).pages.includes(p);
+// newPages: true lets editors create top-level pages (name.html) from the editor's "New page".
+export const isNewPageName = p => /^[a-z0-9][a-z0-9-]{0,60}\.html$/.test(p) && p !== 'admin.html';
+export const isPage = (p, cfg) => site(cfg).pages.includes(p) || (!!cfg?.newPages && isNewPageName(p));
 export const isData = (p, cfg) => Object.keys(site(cfg).dataFiles).includes(p);
 export const isEditable = (p, cfg) => isPage(p, cfg) || isData(p, cfg);
 export const isUpload = (p, cfg) =>

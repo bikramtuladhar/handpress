@@ -50,7 +50,8 @@ Handpress keeps the HTML as the source of truth and teaches the browser to edit 
 | **Page settings** | Title, meta description, and the text shown when the page is shared. |
 | **Site data** | A form over your JSON data file, for lists the site renders from data. Lists on the page get handles too (move, duplicate, edit, remove, add, add images), and redraw as they change. |
 | **Guide** | Tips for each page, with a *Show me* button; opens by itself the first time a page is edited. |
-| **AI assistant** | Hover a block → **AI** to rewrite it in place — a text block, a whole card or section — or write a new block after it; the **AI** bar button writes a whole new section. Free models through [OpenRouter](https://openrouter.ai) or [opencode Zen](https://opencode.ai/docs/zen/) (your own key, kept in the browser, sent only to the provider you chose). It writes with your site's design — colours, classes, section shapes and voice (see `EDITOR_HOOKS.ai`) — and refuses to change a block's structure. AI edits undo, draft and Save like any typed change. |
+| **AI assistant** | One panel you can drag anywhere. Pick any block on the page (a heading, a card, a whole section, the empty canvas) and tell it what to do: **rewrite** the words in place (layout and keys kept), **redesign** it (layout may change), **build** new content inside it, or **add** a block after it. Every result shows as a preview *and* as HTML you can edit by hand before Apply, and **Edit HTML** opens any block's own HTML. The AI is given the page's CSS (custom properties, element and class rules in use) and its HTML outline, so it writes with your design. Free models through [OpenRouter](https://openrouter.ai) or [opencode Zen](https://opencode.ai/docs/zen/), with the provider and model picked in the panel. Your own key, stored encrypted in the browser and sent only to the provider you chose. AI edits undo, draft and Save like any typed change. |
+| **New pages** | With `newPages` on, **New page** makes an empty page (your head, header and footer around a blank canvas): click the canvas and build it section by section with AI. Starting from nothing? `npx handpress blank public/index.html`. |
 
 ![Duplicating and reordering list items](docs/images/lists.png)
 ![The site data panel](docs/images/site-data.png)
@@ -85,7 +86,8 @@ And a back end. On Cloudflare, point a Worker at `src/worker.js`:
     "dataFiles": { "data.js": "Opening times" },   // window.NAME = { …valid JSON… };
     "globalBlocks": ["header", "footer"],          // edited once, written to every page
     "uploadDir": "uploads",
-    "forceVisible": "[data-reveal]"                // if you animate things into view
+    "forceVisible": "[data-reveal]",               // if you animate things into view
+    "newPages": false                              // true: editors may create name.html pages
   }
 }
 ```
@@ -144,9 +146,18 @@ Everything else is closed by default:
   save is refused rather than overwriting their work.
 - Uploads are limited by extension and directory. On a host that executes files, also deny
   execution in the uploads directory (see `docs/other-hosts.md`), and test it.
+- With `newPages`, editors may also create top-level `name.html` pages (never `admin.html`). A
+  new file cannot overwrite an existing one: a file sent without a hash is refused if it exists.
+- AI keys never reach your server. They are kept in the browser, encrypted with AES-GCM under a
+  key the browser generates and stores as non-extractable (IndexedDB), so a copy of the
+  browser's storage (a synced profile, a backup, an extension reading localStorage) yields only
+  ciphertext, useless on any other machine. Requests go straight from the browser to the chosen
+  provider. Script running on the page itself could still use the key; that is the same trust
+  boundary as above, so keep the admin list short.
 - The only outside hosts are `accounts.google.com` (the sign-in button),
   `oauth2.googleapis.com` (checking the sign-in token) and, for the Worker, `api.github.com`
-  (reading files and committing saves; `GITHUB_API` overrides it). The PHP half writes to disk
+  (reading files and committing saves; `GITHUB_API` overrides it). The AI assistant, when an
+  editor uses it, calls `openrouter.ai` or `opencode.ai` from the editor's browser only. The PHP half writes to disk
   and never calls GitHub. There is no telemetry.
 
 ## Working on Handpress

@@ -12,6 +12,9 @@
   "name": "handpress-demo",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
+  // Branch builds run `wrangler preview`, which needs this block (empty is fine): each pushed
+  // branch gets its own preview URL of the demo.
+  "previews": {},
   "assets": {
     "directory": ".",
     // Serve /about from about.html, the clean URLs the example uses.

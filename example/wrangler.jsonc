@@ -14,7 +14,9 @@
       "dataFiles": { "data.js": "Opening times and markets" },
       "globalBlocks": ["header", "footer"],
       "uploadDir": "uploads",
-      "forceVisible": "[data-reveal]"
+      "forceVisible": "[data-reveal]",
+      // Editors may create new pages (name.html) from a blank canvas and build them with AI.
+      "newPages": true
     }
   }
   // Secrets (wrangler secret put …): GITHUB_TOKEN, SESSION_SECRET, ADMIN_EMAILS
