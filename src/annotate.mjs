@@ -8,6 +8,7 @@
  *   data-e="m12"   an image
  *   data-e="i12"   an item of a repeating list that is not itself text
  *   data-e-list    a container whose children can be duplicated, moved and deleted
+ *   data-e-canvas  (you add it) an area, usually <main>, to build in: keyed and a list even when empty
  *
  * Keys inside --global blocks (the header and footer repeated on every page) start with "g"
  * and line up across pages, so editing one updates all of them.
@@ -68,7 +69,8 @@ export function annotate(html, { globals = [] } = {}) {
     if (el !== body && isUnit(el)) return key(el, 't', g);
     const ch = kids(el).filter(k => !SKIP.has(k.tagName));
     // <main>: its sections can be added, copied, moved and removed like any other list.
-    const list = (el.tagName === 'main' && ch.length > 0) || LISTABLE.has(el.tagName) && ch.length >= 2 &&
+    const canvas = attr(el, 'data-e-canvas') !== undefined;
+    const list = canvas || (el.tagName === 'main' && ch.length > 0) || LISTABLE.has(el.tagName) && ch.length >= 2 &&
       ch.every(k => k.tagName === ch[0].tagName && !SKIP.has(k.tagName) &&
         (!WRAPPER.has(k.tagName) || firstClass(k) === firstClass(ch[0]))); // layout wrappers must also share a class
     ch.forEach(k => walk(k, g));
@@ -76,6 +78,7 @@ export function annotate(html, { globals = [] } = {}) {
       setAttr(el, 'data-e-list', '');
       ch.forEach(k => key(k, 'i', g)); // no-op for children already keyed as text or image
     }
+    if (canvas) key(el, 'i', g);
   })(body, '');
   return serialize(doc);
 }

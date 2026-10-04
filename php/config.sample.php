@@ -17,7 +17,8 @@ return [
     'data_files' => ['data.js' => 'Opening times'],   // window.NAME = { …valid JSON… };
     'global_blocks' => ['header', 'footer'],
     'upload_dir' => 'uploads',
-    'force_visible' => '',        // a selector to keep visible while editing, if you animate on scroll
+    'force_visible' => '',
+    'new_pages' => false,         // true: editors can create new pages (name.html) and build them with AI        // a selector to keep visible while editing, if you animate on scroll
 
     // Commit each save and push (needs git, shell access and a deploy key).
     'git' => true,

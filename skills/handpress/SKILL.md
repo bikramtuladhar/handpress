@@ -114,10 +114,16 @@ owner is likely to change.
 `ai` feeds the built-in AI assistant (free models through OpenRouter or opencode Zen; the owner
 pastes their own key under AI → Settings and it stays in the browser): `context` is brand-voice
 guidance, `provider` picks the default provider, `model` that provider's default model id, and
-`actions` extra quick actions in each block's AI menu. The AI writes with the site's own design —
-colours, classes and section shapes are collected from the page itself — can rewrite an existing
-block in place (its structure and `data-e` keys are preserved) or add a new one, and its output is
-sanitized and applied as an ordinary edit.
+`actions` extra quick actions in the AI panel's rewrite mode. The panel is movable; the editor
+picks any block on the page and rewrites its words in place (structure and `data-e` keys are
+preserved), redesigns it, builds inside it, or adds after it, with the HTML editable by hand before
+Apply. The AI is given the page's CSS rules and HTML outline, so it writes with the site's own
+design. Output is sanitized and applied as an ordinary edit. Keys are stored encrypted in the
+browser (non-extractable WebCrypto key) and go only to the chosen provider.
+
+To let the owner add pages, set `"newPages": true` in `EDITOR` (PHP: `'new_pages' => true`): the
+bar gets **New page**, which makes an empty page around a `<main data-e-canvas>` canvas to build
+with AI. For a site from nothing: `npx handpress blank public/index.html`, list it in `pages`.
 
 ## Things that go wrong
 

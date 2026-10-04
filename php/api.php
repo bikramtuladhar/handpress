@@ -22,7 +22,10 @@ $cfg += [
     'force_visible' => '', 'git' => true, 'backups' => true,
 ];
 
-function is_page(string $p, array $cfg): bool { return in_array($p, $cfg['pages'], true); }
+function is_page(string $p, array $cfg): bool {
+    return in_array($p, $cfg['pages'], true) ||    // new_pages: editors may create top-level name.html pages
+        (!empty($cfg['new_pages']) && $p !== 'admin.html' && (bool) preg_match('~^[a-z0-9][a-z0-9-]{0,60}\.html$~', $p));
+}
 function is_data(string $p, array $cfg): bool { return array_key_exists($p, $cfg['data_files']); }
 function is_editable(string $p, array $cfg): bool { return is_page($p, $cfg) || is_data($p, $cfg); }
 function is_upload(string $p, array $cfg): bool {
@@ -94,6 +97,7 @@ if ($route === 'config') {
         'globalBlocks' => array_values($cfg['global_blocks']),
         'uploadDir' => trim($cfg['upload_dir'], '/'),
         'forceVisible' => $cfg['force_visible'],
+        'newPages' => !empty($cfg['new_pages']),
         'clientId' => $cfg['google_client_id'],
     ]);
 }
@@ -157,6 +161,12 @@ if ($route === 'save' && $method === 'POST') {
         if (is_file($full) && sha1((string) file_get_contents($full)) !== $f['sha']) $stale[] = $f['path'];
     }
     if ($stale) fail(409, 'Changed since you opened it: ' . implode(', ', $stale) . '. Reload the page and redo your edit.');
+    // A text file sent without a sha is a new file: it must not overwrite one that exists.
+    $taken = [];
+    foreach ($files as $f) {
+        if (empty($f['sha']) && isset($f['content']) && is_file("$ROOT/{$f['path']}")) $taken[] = $f['path'];
+    }
+    if ($taken) fail(409, 'Already exists: ' . implode(', ', $taken) . '. Pick another name.');
 
     $written = [];
     foreach ($files as $f) {

@@ -32,6 +32,11 @@ assert.ok(isUpload('uploads/photo-ab12.jpg', cfg));
 assert.ok(!isUpload('uploads/shell.php', cfg) && !isUpload('uploads/../x.jpg', cfg));
 assert.ok(isUpload('uploads/clip-ab12.mp3', cfg) && !isUpload('uploads/clip.mp3.php', cfg));
 
+// newPages: top-level name.html pages become editable, nothing else
+const np = { ...cfg, newPages: true };
+assert.ok(isEditable('workshops.html', np) && !isEditable('workshops.html', cfg));
+for (const p of ['admin.html', 'a/b.html', '../x.html', 'X.html', 'x.htm', '.html']) assert.ok(!isEditable(p, np), p);
+
 // file checks
 assert.equal(checkFile({ path: 'index.html', content: '<!doctype html><html></html>' }, cfg), '');
 assert.match(checkFile({ path: 'index.html', content: '<p>hi</p>' }, cfg), /not a full HTML page/);
@@ -53,6 +58,11 @@ assert.match(once, /data-e-list/, 'the nav list is editable as a list');
 assert.match(once, /<li data-e="gt\d+">/, 'header keys are global');
 assert.match(once, /<p data-e="gt\d+">© 2026<\/p>/, 'footer keys are global');
 assert.ok(!/<body[^>]*data-e=/.test(once), 'body itself is never a unit');
+
+// a canvas is keyed and a list even while empty
+const blank = annotate('<!doctype html><html><head></head><body><main data-e-canvas=""></main></body></html>');
+assert.match(blank, /<main data-e-canvas="" data-e-list="" data-e="i\d+"><\/main>/);
+assert.equal(annotate(blank), blank, 'canvas keying is idempotent');
 
 // the example site ships keyed
 for (const f of fs.globSync('example/site/*.html').filter(f => !f.endsWith('admin.html'))) {
