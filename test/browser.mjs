@@ -1,7 +1,7 @@
 /**
  * Drives the example site in a real browser: edit text, edit a shared block, duplicate a
  * list item, undo / redo, reload (the draft survives), edit the data file, save, and check
- * what was committed. Then the AI panel with OpenRouter and opencode Zen mocked: settings and the
+ * what was committed. Then the AI panel with OpenRouter mocked (opencode Zen hidden): settings and the
  * encrypted key, generate, hand-edited HTML, sanitize, undo, dragging the panel, picking a block on
  * the page, in-place rewrite (and its structure guard), redesign, build inside, switching
  * providers, and a new page built from a blank canvas.
@@ -91,7 +91,7 @@ assert.equal(idx.match(/class="card"/g).length, 3, 'card duplicated');
 assert.match(fs.readFileSync(SITE + 'about.html', 'utf8'), /est\. 2011/, 'footer written to the other page too');
 assert.match(fs.readFileSync(SITE + 'data.js', 'utf8'), /7am – 2pm/);
 console.log('commit:', fs.readFileSync(process.env.MOCK_LOG || '/tmp/mock-github.log', 'utf8').trim().slice(0, 150));
-// --- AI assistant: OpenRouter and opencode Zen mocked — settings, generate, sanitize, undo,
+// --- AI assistant: OpenRouter mocked — settings, generate, sanitize, undo,
 // --- in-place rewrite of an existing block (and the structure guard), provider switching ---
 await page.route('https://openrouter.ai/api/v1/models', route => route.fulfill({
   contentType: 'application/json',
@@ -100,18 +100,9 @@ await page.route('https://openrouter.ai/api/v1/models', route => route.fulfill({
     { id: 'paid/model', name: 'Paid', pricing: { prompt: '0.001', completion: '0.002' } }
   ] })
 }));
-await page.route('https://opencode.ai/zen/v1/models', route => route.fulfill({
-  contentType: 'application/json',
-  body: JSON.stringify({ object: 'list', data: [
-    { id: 'claude-fable-5' },          // Zen serves Claude on /messages
-    { id: 'gemini-3-flash' },          // ...and Gemini on a Google-shaped route
-    { id: 'glm-5.3' },
-    { id: 'nemotron-3-ultra-free' }
-  ] })
-}));
 const CARD_HTML = '<img src="loaf.svg" width="320" height="200" alt="AI loaf." data-e="m6">' +
   '<h3 data-e="t7">AI country sourdough</h3><p data-e="t8">Rewritten by the test.</p>';
-let aiSections = 0, zenURL = '';
+let aiSections = 0;
 const answer = content => ({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }) });
 await page.route('https://openrouter.ai/api/v1/chat/completions', route => {
   const body = JSON.parse(route.request().postData() || '{}');
@@ -128,11 +119,6 @@ await page.route('https://openrouter.ai/api/v1/chat/completions', route => {
     if (/data-e="m6"/.test(user)) return route.fulfill(answer(CARD_HTML));
   }
   route.fulfill(answer('Bread, slowly — rewritten by the test.'));
-});
-await page.route('https://opencode.ai/zen/v1/chat/completions', route => {
-  zenURL = route.request().url();
-  const inside = /INSIDE: /.test(route.request().postData() || '');
-  route.fulfill(answer(JSON.stringify({ html: inside ? '<section><h2>Built inside.</h2></section>' : '<p class="lede" data-e="t0">Zen bread.</p>' })));
 });
 const aiBlockKey = text => page.evaluate(t => {
   const n = Array.from(document.querySelectorAll('[data-e]')).find(e => e.textContent.includes(t));
@@ -239,26 +225,13 @@ for (let i = 0; i < 4; i++) { await page.getByRole('button', { name: 'Undo' }).c
 assert.equal(await page.locator('[data-e="i12"]').count(), 1, 'undo brought the original card back');
 console.log('ai pick + in-place rewrite + structure guard + redesign + build inside ok');
 
-// opencode Zen: a second provider with its own key and model, chat-completions models only.
+// opencode Zen is hidden while it sends no CORS headers: not offered, and a saved choice falls back.
+await page.evaluate(() => { const s = JSON.parse(localStorage['ed-ai']); s.provider = 'opencode'; localStorage['ed-ai'] = JSON.stringify(s); });
 await openAiBar();
-await page.locator(P + ' summary', { hasText: 'Model & key' }).click();   // folded away once a key is set
-await page.locator(P + ' select[data-ai=provider]').selectOption('opencode');
-await page.locator(P + ' input[type=password]').fill('zen-key');
-await page.waitForFunction(() => Array.from(document.querySelectorAll('.ed-ai select[data-ai=model] option')).some(o => o.value === 'glm-5.3'));
-assert.equal(await page.locator(P + ' select[data-ai=model] option', { hasText: 'claude-fable-5' }).count(), 0, 'Zen models on other endpoints left out');
-assert.equal(await page.locator(P + ' select[data-ai=model] option', { hasText: 'gemini-3-flash' }).count(), 0, 'Zen Google-route models left out');
-assert.match(await page.locator(P + ' select[data-ai=model]').inputValue(), /free$/, 'Zen defaults to a free model');
-await page.locator(P + ' select[data-ai=mode]').selectOption('after');
-await page.locator(P + ' textarea[data-ai=prompt]').fill('a zen line');
-await generate();
-await apply();
-await page.waitForFunction(() => /Zen bread/.test(document.body.textContent));
-assert.match(zenURL, /opencode\.ai\/zen\/v1\/chat\/completions/, 'call went to opencode Zen');
-assert.equal(await page.evaluate(() => { const s = JSON.parse(localStorage['ed-ai']); return s.provider + '|' + !!s.sealed.openrouter + '|' + !!s.sealed.opencode + '|' + /free$/.test(s.models.opencode); }),
-  'opencode|true|true|true', 'each provider keeps its own settings');
+assert.equal(await page.locator(P + ' select[data-ai=provider] option[value=opencode]').count(), 0, 'Zen not offered');
+assert.equal(await page.locator(P + ' select[data-ai=provider]').inputValue(), 'openrouter', 'saved Zen choice falls back to OpenRouter');
 await page.locator(P + ' button', { hasText: 'Close' }).click();
-await page.getByRole('button', { name: 'Undo' }).click(); await page.waitForLoadState('load'); await ready();
-console.log('ai provider switch (opencode Zen) ok');
+console.log('opencode Zen hidden ok');
 
 // A new page from a blank canvas (EDITOR.newPages): created, opened, built with AI, saved.
 fs.rmSync(SITE + 'canvas-test.html', { force: true });

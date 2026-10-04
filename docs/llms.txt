@@ -64,8 +64,8 @@ edit <select> options; edit page meta; edit the data file as a form; use the AI 
 pick any keyed block on the page, then: rewrite its words in place — data-e keys are checked and
 preserved —, redesign it (replace, layout may change), build inside it (append), or add after it;
 results show as a preview and as hand-editable HTML; "Edit HTML" edits a block's HTML directly).
-The AI is given the page's CSS rules and HTML outline. Free models through OpenRouter or opencode
-Zen, provider and model chosen in the panel, called directly from the browser; the owner's key is
+The AI is given the page's CSS rules and HTML outline. Free models through OpenRouter (opencode Zen
+is built in but hidden: it sends no CORS headers), model chosen in the panel, called directly from the browser; the owner's key is
 stored in localStorage encrypted with a non-extractable AES-GCM key kept in IndexedDB, and sent
 only to that provider. Generated HTML is sanitized and committed as an ordinary op (after | in |
 replace | text), so it undoes, drafts and saves like any typed change.
