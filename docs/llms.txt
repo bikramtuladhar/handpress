@@ -70,9 +70,10 @@ only to that provider. Generated HTML is sanitized and committed as an ordinary 
 replace | text), so it undoes, drafts and saves like any typed change.
 New pages: EDITOR.newPages (PHP: new_pages) lets editors create top-level name.html pages (not
 admin.html; a file sent without a sha must not exist). "New page" copies the head and global blocks
-around <main data-e-canvas>, an empty canvas built with the AI. `handpress blank page.html` writes a
-blank canvas page to start a site from nothing. The keying script keys a data-e-canvas element as a
-list even when empty.
+around <main data-e-canvas>, an empty canvas built with the AI or from a starter kit (STARTERS in
+editor.js: landing, studio, bakery). `handpress blank page.html [--kit landing|studio|bakery]` writes a
+canvas page, empty or pre-filled with that kit, to start a site from nothing. The keying script keys a
+data-e-canvas element (and an empty <main>, which it marks as one) as a list even when empty.
 
 Per-site quirks and extras go in window.EDITOR_HOOKS: beforeEdit(el) to detach an element the site
 animates; syncUnit(sourceEl, liveEl) to keep an attribute in step with edited text (liveEl may be

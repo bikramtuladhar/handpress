@@ -123,7 +123,9 @@ browser (non-extractable WebCrypto key) and go only to the chosen provider.
 
 To let the owner add pages, set `"newPages": true` in `EDITOR` (PHP: `'new_pages' => true`): the
 bar gets **New page**, which makes an empty page around a `<main data-e-canvas>` canvas to build
-with AI. For a site from nothing: `npx handpress blank public/index.html`, list it in `pages`.
+with AI or from a starter kit. For a site from nothing: `npx handpress blank public/index.html`,
+list it in `pages`. Add `--kit landing`, `--kit studio` or `--kit bakery` to start from a keyed
+first draft instead of an empty canvas.
 
 ## Things that go wrong
 

@@ -274,10 +274,17 @@ await page.locator(P + ' textarea[data-ai=prompt]').fill('INSIDE: a hero');
 await generate();
 await apply();
 await page.waitForFunction(() => /Built inside/.test(document.querySelector('[data-e-canvas]').textContent));
+assert.equal(await page.locator(P + ' .ed-ai-target').textContent(), '<main> page canvas', 'target label no longer says empty');
+// A starter kit, no AI: loaded into the preview, applied, and its lists work like any other.
+await page.locator(P + ' textarea[data-ai=prompt]').fill('');
+await page.locator(P + ' [data-kit=studio]').click();
+await apply();
+await page.waitForFunction(() => /Selected work/.test(document.querySelector('[data-e-canvas]').textContent));
+assert.equal(await page.locator('[data-e-canvas] ul[data-e-list] > li[data-e]').count(), 3, 'kit list items are keyed');
 const saved = page.waitForEvent('load', { timeout: 60000 });
 await page.locator('.ed-bar button', { hasText: /^Save/ }).click();
 await saved;
-assert.match(fs.readFileSync(SITE + 'canvas-test.html', 'utf8'), /Built inside/, 'canvas content saved');
+assert.match(fs.readFileSync(SITE + 'canvas-test.html', 'utf8'), /Built inside.*Selected work/s, 'canvas content and kit saved');
 fs.rmSync(SITE + 'canvas-test.html');
 console.log('new page from blank canvas ok');
 

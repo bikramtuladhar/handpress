@@ -1,6 +1,7 @@
 // npm test — sessions, the file allowlist, and the keying script.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { signSession, readSession, isAdmin, isEditable, isUpload, checkFile } from './src/lib.js';
 import { annotate } from './src/annotate.mjs';
 
@@ -63,6 +64,19 @@ assert.ok(!/<body[^>]*data-e=/.test(once), 'body itself is never a unit');
 const blank = annotate('<!doctype html><html><head></head><body><main data-e-canvas=""></main></body></html>');
 assert.match(blank, /<main data-e-canvas="" data-e-list="" data-e="i\d+"><\/main>/);
 assert.equal(annotate(blank), blank, 'canvas keying is idempotent');
+assert.match(annotate('<!doctype html><html><head></head><body><main></main></body></html>'),
+  /<main data-e-canvas="" data-e-list="" data-e="i\d+"><\/main>/, 'an empty <main> becomes a canvas');
+
+// handpress blank --kit: every starter kit makes a keyed page that `keys` leaves alone
+const tmp = fs.mkdtempSync('/tmp/hp-');
+for (const kit of ['landing', 'studio', 'bakery']) {
+  execFileSync('node', ['scripts/cli.mjs', 'blank', `${tmp}/${kit}.html`, '--kit', kit]);
+  const html = fs.readFileSync(`${tmp}/${kit}.html`, 'utf8'), keys = html.match(/data-e="[^"]+"/g);
+  assert.ok(keys.length > 10 && new Set(keys).size === keys.length, `${kit}: keyed, no duplicates`);
+  assert.equal(annotate(html), html, `${kit}: stable under keys`);
+  assert.match(html, /\(\?:\^\|;\\s\*\)ed=1/, `${kit}: the editor loader regex kept its \\s`);
+}
+fs.rmSync(tmp, { recursive: true });
 
 // the example site ships keyed
 for (const f of fs.globSync('example/site/*.html').filter(f => !f.endsWith('admin.html'))) {
