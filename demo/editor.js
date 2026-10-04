@@ -1681,6 +1681,19 @@
     ['in', 'Build new content inside it'],
     ['after', 'Add a new block after it']
   ];
+  // Starter kits: a whole first draft for an empty canvas, picked as-is or adapted by the AI. Inline
+  // styles on the blank page's CSS variables (with fallbacks), so they read well on any site, and
+  // t0/i0 keys that Apply renumbers like AI output.
+  // ponytail: `handpress blank --kit` reads this array straight out of editor.js, so it stays JSON.
+  var STARTERS = /*starters*/[
+    { "id": "landing", "name": "Landing page", "about": "Headline, three selling points, a call to action",
+      "html": "<section data-e='i0'><p data-e='t0' style='color:var(--accent,#2f5fd0);font-weight:600'>New</p><h1 data-e='t0'>Say what you do in one line</h1><p data-e='t0' style='font-size:1.2em;color:var(--muted,#6b675f);max-width:36em'>One or two sentences on who it is for and why it helps. Keep it plain.</p><p data-e='t0'><a href='#contact' style='display:inline-block;padding:.75em 1.4em;border-radius:999px;background:var(--accent,#2f5fd0);color:#fff;text-decoration:none'>Get started</a></p></section><section data-e='i0'><h2 data-e='t0'>Why people choose us</h2><div data-e-list='' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px'><article data-e='i0' style='padding:24px;border:1px solid rgba(0,0,0,.12);border-radius:var(--radius,14px)'><h3 data-e='t0'>Fast</h3><p data-e='t0'>A short line about the first benefit.</p></article><article data-e='i0' style='padding:24px;border:1px solid rgba(0,0,0,.12);border-radius:var(--radius,14px)'><h3 data-e='t0'>Friendly</h3><p data-e='t0'>A short line about the second benefit.</p></article><article data-e='i0' style='padding:24px;border:1px solid rgba(0,0,0,.12);border-radius:var(--radius,14px)'><h3 data-e='t0'>Fair</h3><p data-e='t0'>A short line about the third benefit.</p></article></div></section><section id='contact' data-e='i0' style='text-align:center'><h2 data-e='t0'>Ready when you are</h2><p data-e='t0'>Write to <a href='mailto:hello@example.com'>hello@example.com</a> and we reply within a day.</p></section>" },
+    { "id": "studio", "name": "Studio / portfolio", "about": "Short intro, selected work, contact",
+      "html": "<section data-e='i0'><h1 data-e='t0'>Hi, I make things</h1><p data-e='t0' style='font-size:1.2em;color:var(--muted,#6b675f);max-width:36em'>Designer and maker in a small studio. I take on a handful of projects a year.</p></section><section data-e='i0'><h2 data-e='t0'>Selected work</h2><ul data-e-list='' style='list-style:none;padding:0;margin:0;display:grid;gap:12px'><li data-e='i0' style='padding:20px 0;border-top:1px solid rgba(0,0,0,.12)'><h3 data-e='t0'>Project one</h3><p data-e='t0'>What it was, who it was for, what came of it.</p></li><li data-e='i0' style='padding:20px 0;border-top:1px solid rgba(0,0,0,.12)'><h3 data-e='t0'>Project two</h3><p data-e='t0'>What it was, who it was for, what came of it.</p></li><li data-e='i0' style='padding:20px 0;border-top:1px solid rgba(0,0,0,.12)'><h3 data-e='t0'>Project three</h3><p data-e='t0'>What it was, who it was for, what came of it.</p></li></ul></section><section data-e='i0'><h2 data-e='t0'>Work with me</h2><p data-e='t0'>Say hello at <a href='mailto:hello@example.com'>hello@example.com</a>.</p></section>" },
+    { "id": "bakery", "name": "Bakery (the example site)", "about": "A small shop: welcome, this week, opening hours",
+      "html": "<section data-e='i0'><p data-e='t0' style='color:var(--accent,#2f5fd0);font-weight:600'>Since 2011</p><h1 data-e='t0'>Bread, slowly</h1><p data-e='t0' style='font-size:1.2em;color:var(--muted,#6b675f);max-width:36em'>Four loaves, two pastries, one oven. We open at seven and stop when the shelves are empty.</p></section><section data-e='i0'><h2 data-e='t0'>This week</h2><div data-e-list='' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px'><article data-e='i0' style='padding:24px;border:1px solid rgba(0,0,0,.12);border-radius:var(--radius,14px)'><h3 data-e='t0'>Country sourdough</h3><p data-e='t0'>Three days, one starter, a dark crust.</p></article><article data-e='i0' style='padding:24px;border:1px solid rgba(0,0,0,.12);border-radius:var(--radius,14px)'><h3 data-e='t0'>Seeded rye</h3><p data-e='t0'>Caraway, linseed and a close crumb.</p></article></div></section><section data-e='i0'><h2 data-e='t0'>Opening hours</h2><ul data-e-list=''><li data-e='t0'>Tuesday to Friday, 7am to 3pm</li><li data-e='t0'>Saturday, 7am to 1pm</li><li data-e='t0'>Sunday and Monday, closed</li></ul></section>" }
+  ]/*end*/;
+
   async function openAi(target, mode) {
     syncUnits();
     stopPicking();
@@ -1730,6 +1743,17 @@
     ].concat(AI_HOOKS.actions || []).forEach(function (a) {
       quick.append(h('button', { type: 'button', className: 'ed-choice', title: a[1], on: { click: function () { generate(a[1]); } } }, [h('strong', { textContent: a[0] })]));
     });
+    var kits = h('div', { className: 'ed-field' }, [h('span', { textContent: 'Or start from a kit' }),
+      h('div', { className: 'ed-choices ed-ai-quick' }, STARTERS.map(function (k) {
+        return h('button', { type: 'button', className: 'ed-choice', 'data-kit': k.id, on: { click: function () { useKit(k); } } },
+          [h('strong', { textContent: k.name }), h('small', { textContent: k.about })]);
+      }))]);
+    function useKit(k) {                                      // as is, or adapted when there is an instruction
+      var inst = promptIn.value.trim();
+      if (inst) return generate('Start from this starter kit and adapt it: words, and the layout where asked. Keep its data-e and data-e-list attributes.\nInstruction: ' + inst + '\nStarter kit:\n' + k.html);
+      setResult(k.html);
+      note.textContent = 'Starter loaded. Apply it, edit the HTML, or type an instruction and pick the kit again to have the AI adapt it.';
+    }
     var promptIn = h('textarea', { rows: 3, 'data-ai': 'prompt', on: { keydown: function (e) {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); generate(); }
     } } });
@@ -1753,6 +1777,7 @@
       if (modeSel.selectedOptions[0].disabled) modeSel.value = $$('option', modeSel).filter(function (o) { return !o.disabled; })[0].value;
       var m = modeSel.value;
       quick.hidden = m !== 'edit';
+      kits.hidden = !(m === 'in' && t && t.hasAttribute('data-e-canvas'));
       promptIn.placeholder = {
         edit: 'Optional: how to rewrite it, e.g. “friendlier, mention the Saturday market”',
         replace: 'How should it look and read? e.g. “a two-column layout: photo left, text and a button right”',
@@ -1773,7 +1798,7 @@
     async function generate(instruction) {
       if (running) return;
       var m = modeSel.value, sk = t && srcEl(keyOf(t));
-      if (!sk) { note.textContent = 'That block is gone. Pick another.'; return; }
+      if (!sk) { note.textContent = t ? 'That block is gone. Pick another.' : 'Pick a block on the page first (Pick on page).'; return; }
       var inst = instruction || promptIn.value.trim() || (m === 'edit' ? 'Rewrite the content, keeping the same meaning.' : '');
       if (!inst) { note.textContent = 'Describe what you want first.'; promptIn.focus(); return; }
       running = true;
@@ -1814,8 +1839,8 @@
     function applyResult() {
       try {
         if (result == null || !result.trim()) throw new Error('Generate something first (or use Edit HTML).');
-        var m = modeSel.value, k = keyOf(t), sk = srcEl(k);
-        if (!sk) throw new Error('That block is gone. Pick another.');
+        var m = modeSel.value, k = t && keyOf(t), sk = srcEl(k);
+        if (!sk) throw new Error(t ? 'That block is gone. Pick another.' : 'Pick a block on the page first (Pick on page).');
         if (m === 'edit') {
           var html = aiSanitize(result, 'clean');
           if (!aiSameKeys(sk, html)) throw new Error('That changes which parts are editable. Choose “Redesign it” to change the layout.');
@@ -1823,6 +1848,7 @@
         } else {
           var live = insertAt(t, aiSanitize(result, 'section'), m);
           if (m === 'replace' && live) setTarget(live);
+          else targetLabel.textContent = describe(t);         // no longer "(empty)"
         }
         aiCtx = null;                                         // the page changed: rebuild what the AI knows
         clearResult();
@@ -1864,6 +1890,7 @@
         h('label', { className: 'ed-field' }, [h('span', { textContent: 'What to do' }), modeSel]),
         quick,
         h('label', { className: 'ed-field' }, [h('span', { textContent: 'Instruction' }), promptIn]),
+        kits,
         h('p', { className: 'ed-ai-run' }, [tool('Generate', 'Ask the AI (⌘/Ctrl+Enter)', function () { generate(); })]),
         note,
         preview,
@@ -2007,7 +2034,7 @@
     '.ed-ai [hidden]{display:none!important}',
     '.ed-picking,.ed-picking *{cursor:crosshair!important}',
     '.ed-on [data-e-canvas]:empty{display:grid;place-items:center;min-height:55vh;margin:16px;border:2px dashed var(--ed-gold);border-radius:12px;cursor:pointer;background:rgba(255,236,190,.15)}',
-    '.ed-on [data-e-canvas]:empty::before{content:"Empty canvas \\2014  click to build this page with AI";font:16px system-ui,sans-serif;color:#8a6420}',
+    '.ed-on [data-e-canvas]:empty::before{content:"Empty canvas \\2014  click to build this page with AI or a starter kit";font:16px system-ui,sans-serif;color:#8a6420}',
     '@media (max-width:700px){body{padding-bottom:170px}.ed-status{order:9;flex-basis:100%}.ed-end{margin-left:0}.ed-drawer{bottom:0}.ed-ai{left:8px;right:8px;bottom:8px;width:auto;max-height:70vh}}'
   ].join('\n');
   document.head.append(h('style', { 'data-ed-ui': '', textContent: css }));

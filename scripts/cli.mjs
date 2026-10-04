@@ -2,7 +2,7 @@
 /**
  *   handpress install <site-directory>          copy editor.js and admin.html into the site
  *   handpress keys "<glob>" [--global "header, footer"]   add the keys the editor edits by
- *   handpress blank <page.html> [--title "My site"]       a new, empty page to build with the editor's AI
+ *   handpress blank <page.html> [--title "My site"] [--kit landing]   a new page to build with the editor's AI
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,10 +11,13 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [command, ...rest] = process.argv.slice(2);
 
+// The starter kits live in editor.js (the editor offers them on an empty canvas); one copy, read from there.
+const kits = () => JSON.parse(fs.readFileSync(path.join(here, '..', 'src', 'editor.js'), 'utf8').split('/*starters*/')[1].split('/*end*/')[0]);
+
 const usage = () => {
   console.error(`handpress install <site-directory> [--php]
 handpress keys "<glob>" [--global "header, footer"]
-handpress blank <page.html> [--title "My site"]`);
+handpress blank <page.html> [--title "My site"] [--kit ${kits().map(k => k.id).join('|')}]`);
   process.exit(1);
 };
 
@@ -59,8 +62,14 @@ if (command === 'install') {
   if (fs.existsSync(dest)) { console.error(dest, 'already exists'); process.exit(1); }
   const ti = rest.indexOf('--title');
   const title = (ti < 0 ? 'New site' : rest[ti + 1] || 'New site').replace(/[<&]/g, '');
+  const ki = rest.indexOf('--kit');
+  const kit = ki < 0 ? null : kits().find(k => k.id === rest[ki + 1]);
+  if (ki >= 0 && !kit) usage();
+  let n = 1;                                          // the canvas is i1; the kit's t0/i0 keys follow it
+  const body = kit ? kit.html.replace(/data-e='([tmi])0'/g, (_, k) => `data-e='${k}${++n}'`) : '';
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, `<!DOCTYPE html><html lang="en"><head>
+  const { annotate } = await import(path.join(here, '..', 'src', 'annotate.mjs'));   // the same output `keys` writes
+  fs.writeFileSync(dest, annotate(`<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
@@ -75,10 +84,10 @@ h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
 img { max-width: 100%; height: auto; border-radius: var(--radius); }
 a { color: var(--accent); }
 </style>
-</head><body><main data-e="i1" data-e-list="" data-e-canvas=""></main>
-<script>if (/(?:^|;\s*)ed=1/.test(document.cookie)) { var s = document.createElement('script'); s.src = '/editor.js'; s.defer = true; document.head.appendChild(s); }</script>
+</head><body><main data-e="i1" data-e-list="" data-e-canvas="">${body}</main>
+<script>if (/(?:^|;\\s*)ed=1/.test(document.cookie)) { var s = document.createElement('script'); s.src = '/editor.js'; s.defer = true; document.head.appendChild(s); }</script>
 </body></html>
-`);
+`));
   console.log('wrote', dest, '\nNext: list it under pages (or set newPages: true), sign in, and click the empty canvas.');
 } else {
   usage();
