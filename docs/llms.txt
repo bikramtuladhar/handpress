@@ -28,7 +28,8 @@ if (/(?:^|;\s*)ed=1/.test(document.cookie)) {
 Server: a Cloudflare Worker (src/worker.js), or PHP on ordinary shared hosting
 (`npx handpress install ./public_html --php` installs php/api.php plus Apache templates; saves
 are live immediately there), or any host implementing the six endpoints below.
-Configure with vars GITHUB_REPO, GITHUB_BRANCH, GOOGLE_CLIENT_ID and an EDITOR object of
+Configure with vars GITHUB_REPO, GITHUB_BRANCH, SITE_DIR (the repo folder holding the site, e.g.
+public; omit for the repo root), GOOGLE_CLIENT_ID and an EDITOR object of
 {pages, dataFiles, globalBlocks, uploadDir, forceVisible}; secrets GITHUB_TOKEN, SESSION_SECRET,
 ADMIN_EMAILS. Sign-in needs a Google OAuth client with the site's origin as an authorised origin.
 

@@ -11,7 +11,7 @@
  *
  * The files in the repository are the content. A save is a commit; the history is the undo.
  */
-import { signSession, readSession, isAdmin, site, isEditable, checkFile, decodeBase64Utf8 } from './lib.js';
+import { signSession, readSession, isAdmin, site, isEditable, checkFile, decodeBase64Utf8, repoPath } from './lib.js';
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
@@ -25,6 +25,7 @@ const cookies = (session, maxAge) => [
 ];
 const withCookies = (res, list) => { list.forEach(c => res.headers.append('set-cookie', c)); return res; };
 const config = env => (typeof env.EDITOR === 'string' ? JSON.parse(env.EDITOR) : env.EDITOR) || {};
+const inRepo = (env, p) => repoPath(env.SITE_DIR, p);
 
 export default {
   async fetch(req, env) {
@@ -69,7 +70,9 @@ async function api(req, env, url) {
   if (route === 'GET /api/file') {
     const path = url.searchParams.get('path') || '';
     if (!isEditable(path, cfg)) throw fail(400, 'Not an editable file');
-    const f = await gh(env, `contents/${path}?ref=${env.GITHUB_BRANCH}`);
+    const f = await gh(env, `contents/${inRepo(env, path)}?ref=${env.GITHUB_BRANCH}`).catch(e => {
+      throw e.status === 404 ? fail(404, `${inRepo(env, path)} is not in ${env.GITHUB_REPO}. If the site is in a folder, set SITE_DIR.`) : e;
+    });
     return json({ path, sha: f.sha, content: decodeBase64Utf8(f.content) });
   }
 
@@ -106,15 +109,15 @@ async function commit(env, files, message, email) {
   const head = (await gh(env, `git/ref/heads/${branch}`)).object.sha;
   const baseTree = (await gh(env, `git/commits/${head}`)).tree.sha;
   const current = new Map((await gh(env, `git/trees/${baseTree}?recursive=1`)).tree.map(t => [t.path, t.sha]));
-  const stale = files.filter(f => f.sha && current.get(f.path) !== f.sha).map(f => f.path);
+  const stale = files.filter(f => f.sha && current.get(inRepo(env, f.path)) !== f.sha).map(f => f.path);
   if (stale.length) throw fail(409, `Changed since you opened it: ${stale.join(', ')}. Reload the page and redo your edit.`);
   // A text file sent without a sha is a new file: it must not overwrite one that exists.
-  const taken = files.filter(f => f.content != null && !f.sha && current.has(f.path)).map(f => f.path);
+  const taken = files.filter(f => f.content != null && !f.sha && current.has(inRepo(env, f.path))).map(f => f.path);
   if (taken.length) throw fail(409, `Already exists: ${taken.join(', ')}. Pick another name.`);
 
   const tree = [];
   for (const f of files) {
-    const entry = { path: f.path, mode: '100644', type: 'blob' };
+    const entry = { path: inRepo(env, f.path), mode: '100644', type: 'blob' };
     if (f.base64) entry.sha = (await gh(env, 'git/blobs', { method: 'POST', body: JSON.stringify({ content: f.base64, encoding: 'base64' }) })).sha;
     else entry.content = f.content;
     tree.push(entry);
