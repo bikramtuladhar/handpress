@@ -1,7 +1,20 @@
 {
-  // Static files only: the demo has no backend at all. sandbox.js answers the editor's
-  // API calls inside the visitor's browser.
+  // The demo is a static site with no back end: sandbox.js answers the editor's API calls inside
+  // the visitor's browser, so this Worker has no script — only assets.
+  //
+  // Deploy now:   npm run demo:deploy   (rebuilds demo/ from the example, then wrangler deploy)
+  // Auto-deploy:  connect this repo once in the Cloudflare dashboard (Workers & Pages → Create →
+  //               Workers Builds), set the deploy command to `npm run demo:deploy`, and every push
+  //               to main rebuilds and publishes the demo. No secrets live in this file.
+  //
+  // The whole folder is uploaded as assets, so .assetsignore keeps this config and local-only
+  // files (.dev.vars, .wrangler) off the published site.
   "name": "handpress-demo",
   "compatibility_date": "2026-09-01",
-  "assets": { "directory": "." }
+  "workers_dev": true,
+  "assets": {
+    "directory": ".",
+    // Serve /about from about.html, the clean URLs the example uses.
+    "html_handling": "auto-trailing-slash"
+  }
 }

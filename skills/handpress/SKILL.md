@@ -111,11 +111,13 @@ window.EDITOR_HOOKS = {
 `guide` gives each page tips with a “Show me” button; write one or two per page for whatever the
 owner is likely to change.
 
-`ai` feeds the built-in AI assistant (free OpenRouter models, key pasted by the owner under
-AI → Settings, kept in the browser): `context` is brand-voice guidance, `model` an optional default
-OpenRouter model id, and `actions` extra quick actions in each block's AI menu. The AI writes with
-the site's own design — colours, classes and section shapes are collected from the page itself —
-and its output is sanitized and applied as an ordinary edit.
+`ai` feeds the built-in AI assistant (free models through OpenRouter or opencode Zen; the owner
+pastes their own key under AI → Settings and it stays in the browser): `context` is brand-voice
+guidance, `provider` picks the default provider, `model` that provider's default model id, and
+`actions` extra quick actions in each block's AI menu. The AI writes with the site's own design —
+colours, classes and section shapes are collected from the page itself — can rewrite an existing
+block in place (its structure and `data-e` keys are preserved) or add a new one, and its output is
+sanitized and applied as an ordinary edit.
 
 ## Things that go wrong
 
